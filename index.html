@@ -1,0 +1,1299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3-DOF Robot — Forward Kinematics</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0f0f1a;
+    color: #e0e0f0;
+    font-family: 'Segoe UI', sans-serif;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  header {
+    background: #1a1a2e;
+    border-bottom: 1px solid #2a2a4a;
+    padding: 11px 22px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-shrink: 0;
+  }
+  header h1 { font-size: 1.05rem; font-weight: 600; color: #a0a0ff; letter-spacing: .04em; }
+  .hint { font-size: .75rem; color: #44447a; font-style: italic; }
+
+  main { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+
+  .canvas-panel {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #09090f;
+    position: relative;
+  }
+  #rc {
+    display: block;
+    cursor: grab;
+  }
+  #rc:active { cursor: grabbing; }
+
+  .side {
+    width: 310px;
+    flex-shrink: 0;
+    border-left: 1px solid #2a2a4a;
+    background: #111120;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .card { border-bottom: 1px solid #1e1e36; padding: 13px 15px; }
+
+  .card-title {
+    font-size: .7rem;
+    font-weight: 700;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: #6060a0;
+    margin-bottom: 11px;
+  }
+
+  /* Joint inputs */
+  .jg { margin-bottom: 13px; }
+  .jg:last-child { margin-bottom: 0; }
+
+  .jh {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 5px;
+  }
+  .jlabel { font-size: .82rem; font-weight: 600; color: #c0c0e0; }
+
+  .badge {
+    font-size: .65rem;
+    padding: 2px 7px;
+    border-radius: 10px;
+    font-weight: 700;
+    letter-spacing: .04em;
+  }
+  .bz { background: #18184a; color: #8080ff; }
+  .by { background: #182818; color: #60cc60; }
+
+  /* Joint header controls wrapper */
+  .jcontrols { display: flex; align-items: center; gap: 8px; }
+
+  /* Joint type selectors (R / P) */
+  .typsel { display: flex; gap: 3px; }
+  .typbtn {
+    padding: 2px 8px;
+    font-size: .68rem;
+    font-weight: 700;
+    letter-spacing: .05em;
+    border: 1px solid #252545;
+    border-radius: 5px;
+    background: #12121e;
+    color: #505080;
+    cursor: pointer;
+    transition: background .12s, color .12s, border-color .12s;
+    user-select: none;
+  }
+  .typbtn:hover { background: #1c1c36; color: #8080b0; }
+  .typbtn.typ-r.active { background: #1a1a3a; color: #a0a0ff; border-color: #5050aa; }
+  .typbtn.typ-p.active { background: #2a1a10; color: #ffaa60; border-color: #aa6030; }
+
+  /* Axis orientation selectors */
+  .axsel { display: flex; gap: 4px; }
+  .axbtn {
+    padding: 2px 9px;
+    font-size: .68rem;
+    font-weight: 700;
+    letter-spacing: .05em;
+    border: 1px solid #252545;
+    border-radius: 5px;
+    background: #12121e;
+    color: #505080;
+    cursor: pointer;
+    transition: background .12s, color .12s, border-color .12s;
+    user-select: none;
+  }
+  .axbtn:hover { background: #1c1c36; color: #8080b0; }
+  .axbtn.ax-x.active { background: #3a1515; color: #ff7070; border-color: #cc4444; }
+  .axbtn.ax-y.active { background: #153a15; color: #70dd70; border-color: #44aa44; }
+  .axbtn.ax-z.active { background: #15153a; color: #7090ff; border-color: #4454cc; }
+
+  .jctrl { display: flex; align-items: center; gap: 7px; }
+
+  input[type="range"] {
+    flex: 1;
+    accent-color: #6060dd;
+    cursor: pointer;
+  }
+  input[type="number"] {
+    width: 58px;
+    background: #0d0d1c;
+    border: 1px solid #333358;
+    border-radius: 5px;
+    color: #e0e0f0;
+    padding: 4px 6px;
+    font-size: .8rem;
+    outline: none;
+    text-align: center;
+    transition: border-color .2s;
+  }
+  input[type="number"]:focus { border-color: #5555cc; }
+  .deg { font-size: .74rem; color: #44447a; }
+
+  /* Results */
+  .rgrid {
+    display: grid;
+    grid-template-columns: 28px 1fr;
+    gap: 3px 10px;
+    font-size: .78rem;
+  }
+  .rk { color: #6060a0; font-weight: 700; }
+  .rv { font-family: 'Consolas', monospace; color: #b0cce0; }
+
+  .orow { display: flex; gap: 5px; }
+  .oitem {
+    flex: 1;
+    background: #0d0d1c;
+    border: 1px solid #222240;
+    border-radius: 5px;
+    padding: 5px 4px;
+    text-align: center;
+  }
+  .olbl { display: block; font-size: .64rem; color: #55558a; margin-bottom: 2px; }
+  .oval { font-size: .78rem; font-family: 'Consolas', monospace; color: #b0d8f0; }
+
+  /* Matrix */
+  .mwrap {
+    font-family: 'Consolas', monospace;
+    font-size: .69rem;
+    background: #0a0a14;
+    border: 1px solid #222240;
+    border-radius: 5px;
+    padding: 9px 8px;
+    line-height: 1.7;
+  }
+  .mrow { display: flex; }
+  .mc { width: 56px; text-align: right; padding-right: 6px; }
+  .mc.rx { color: #e07070; }
+  .mc.gy { color: #70d070; }
+  .mc.bz { color: #7090f0; }
+  .mc.tr { color: #e8cc70; }
+
+  /* Joint positions */
+  .jtable { width: 100%; border-collapse: collapse; font-size: .74rem; }
+  .jtable th {
+    color: #55558a;
+    font-weight: 600;
+    text-align: left;
+    padding: 2px 4px;
+    border-bottom: 1px solid #1e1e36;
+  }
+  .jtable td {
+    font-family: 'Consolas', monospace;
+    color: #90b0c8;
+    padding: 3px 4px;
+  }
+  .jtable tr:not(:last-child) td { border-bottom: 1px solid #191930; }
+  .jname { color: #8080cc !important; font-weight: 600; }
+
+  /* View bar */
+  .viewbar {
+    position: absolute;
+    bottom: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 5px;
+    background: rgba(8,8,18,0.9);
+    border: 1px solid #252545;
+    border-radius: 10px;
+    padding: 6px 8px;
+    white-space: nowrap;
+  }
+  .vbtn {
+    padding: 5px 13px;
+    font-size: .74rem;
+    font-weight: 700;
+    letter-spacing: .04em;
+    border: 1px solid #252545;
+    border-radius: 6px;
+    background: #12121e;
+    color: #606090;
+    cursor: pointer;
+    transition: background .15s, color .15s, border-color .15s;
+    user-select: none;
+  }
+  .vbtn:hover  { background: #1c1c36; color: #9090c0; border-color: #383868; }
+  .vbtn.active { background: #252598; color: #c0c0ff; border-color: #5050cc; }
+  .vbtn.fit    { color: #508060; border-color: #1e3028; }
+  .vbtn.fit:hover { background: #162216; color: #70b088; border-color: #2a4838; }
+  .vbtn.ik-on  { background: #2a1030; color: #ff80cc; border-color: #aa4488; }
+
+  /* IK matrix input cells */
+  .mci {
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid #2a2a50;
+    font-family: 'Consolas', monospace;
+    font-size: .69rem;
+    width: 56px;
+    text-align: right;
+    padding: 1px 6px 1px 0;
+    outline: none;
+    transition: border-color .15s;
+  }
+  .mci:focus { border-bottom-color: #5555cc; }
+  .mci::-webkit-outer-spin-button,
+  .mci::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .mci[type=number] { -moz-appearance: textfield; }
+
+  /* IK action buttons */
+  .ik-actions { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .ik-btn {
+    padding: 4px 10px;
+    font-size: .7rem;
+    font-weight: 700;
+    letter-spacing: .04em;
+    border: 1px solid #303060;
+    border-radius: 5px;
+    background: #15152a;
+    color: #8080c0;
+    cursor: pointer;
+    transition: background .12s, color .12s, border-color .12s;
+    user-select: none;
+  }
+  .ik-btn:hover { background: #1e1e38; color: #a0a0e0; border-color: #4040a0; }
+
+  /* Camera overlay */
+  .cam-info {
+    position: absolute;
+    top: 10px;
+    left: 12px;
+    font-size: .67rem;
+    font-family: 'Consolas', monospace;
+    color: #353568;
+    pointer-events: none;
+    line-height: 1.65;
+  }
+
+  /* ── Responsive / Mobile ──────────────────────────────────────────────── */
+  @media (max-width: 720px) {
+    body { height: auto; overflow-y: auto; }
+
+    main {
+      flex-direction: column;
+      height: auto;
+      overflow: visible;
+    }
+
+    .canvas-panel {
+      flex: none;
+      width: 100%;
+      height: 58vw;
+      min-height: 260px;
+      max-height: 52vh;
+    }
+
+    .side {
+      width: 100%;
+      border-left: none;
+      border-top: 1px solid #2a2a4a;
+      overflow-y: visible;
+      flex-shrink: 0;
+    }
+
+    .hint { display: none; }
+
+    .viewbar {
+      flex-wrap: wrap;
+      gap: 4px;
+      padding: 5px 7px;
+      bottom: 8px;
+    }
+
+    .vbtn { padding: 5px 10px; font-size: .7rem; }
+
+    input[type="range"] { height: 34px; }
+
+    input[type="number"] {
+      width: 64px;
+      padding: 7px 5px;
+      font-size: .88rem;
+    }
+
+    .mc { width: 46px; }
+    .mwrap { font-size: .6rem; }
+    .mci { width: 46px; font-size: .6rem; }
+
+    header { padding: 9px 14px; gap: 10px; }
+    header h1 { font-size: .92rem; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>3-DOF Robot — Forward Kinematics</h1>
+  <span class="hint">Drag to orbit &nbsp;·&nbsp; Scroll / pinch to zoom</span>
+</header>
+
+<main>
+  <div class="canvas-panel">
+    <canvas id="rc"></canvas>
+    <div class="cam-info" id="camInfo"></div>
+    <div class="viewbar">
+      <button class="vbtn" id="vIso"  >Iso</button>
+      <button class="vbtn" id="vTop"  >Top · XY</button>
+      <button class="vbtn" id="vFront">Front · XZ</button>
+      <button class="vbtn" id="vSide" >Side · YZ</button>
+      <button class="vbtn" id="vIK">IK</button>
+      <button class="vbtn fit" id="vFit">Fit Zoom</button>
+    </div>
+  </div>
+
+  <div class="side">
+
+    <div class="card">
+      <div class="card-title">Joint Configuration</div>
+
+      <div class="jg">
+        <div class="jh">
+          <span class="jlabel" id="jl1">θ₁ — Base</span>
+          <div class="jcontrols">
+            <div class="typsel">
+              <button class="typbtn typ-r active" data-j="1" data-t="r">R</button>
+              <button class="typbtn typ-p" data-j="1" data-t="p">P</button>
+            </div>
+            <div class="axsel">
+              <button class="axbtn ax-x" data-j="1" data-a="x">X</button>
+              <button class="axbtn ax-y" data-j="1" data-a="y">Y</button>
+              <button class="axbtn ax-z active" data-j="1" data-a="z">Z</button>
+            </div>
+          </div>
+        </div>
+        <div class="jctrl">
+          <input type="range"  id="s1" min="-180" max="180" value="30"  step="1">
+          <input type="number" id="n1" min="-180" max="180" value="30"  step="1">
+          <span class="deg" id="u1">°</span>
+        </div>
+      </div>
+
+      <div class="jg">
+        <div class="jh">
+          <span class="jlabel" id="jl2">θ₂ — Shoulder</span>
+          <div class="jcontrols">
+            <div class="typsel">
+              <button class="typbtn typ-r active" data-j="2" data-t="r">R</button>
+              <button class="typbtn typ-p" data-j="2" data-t="p">P</button>
+            </div>
+            <div class="axsel">
+              <button class="axbtn ax-x" data-j="2" data-a="x">X</button>
+              <button class="axbtn ax-y active" data-j="2" data-a="y">Y</button>
+              <button class="axbtn ax-z" data-j="2" data-a="z">Z</button>
+            </div>
+          </div>
+        </div>
+        <div class="jctrl">
+          <input type="range"  id="s2" min="-150" max="150" value="45"  step="1">
+          <input type="number" id="n2" min="-150" max="150" value="45"  step="1">
+          <span class="deg" id="u2">°</span>
+        </div>
+      </div>
+
+      <div class="jg">
+        <div class="jh">
+          <span class="jlabel" id="jl3">θ₃ — Elbow</span>
+          <div class="jcontrols">
+            <div class="typsel">
+              <button class="typbtn typ-r active" data-j="3" data-t="r">R</button>
+              <button class="typbtn typ-p" data-j="3" data-t="p">P</button>
+            </div>
+            <div class="axsel">
+              <button class="axbtn ax-x" data-j="3" data-a="x">X</button>
+              <button class="axbtn ax-y active" data-j="3" data-a="y">Y</button>
+              <button class="axbtn ax-z" data-j="3" data-a="z">Z</button>
+            </div>
+          </div>
+        </div>
+        <div class="jctrl">
+          <input type="range"  id="s3" min="-150" max="150" value="-30" step="1">
+          <input type="number" id="n3" min="-150" max="150" value="-30" step="1">
+          <span class="deg" id="u3">°</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Link Lengths</div>
+
+      <div class="jg">
+        <div class="jh"><span class="jlabel">L₁ — Base link</span></div>
+        <div class="jctrl">
+          <input type="range"  id="sl1" min="0.1" max="3" value="1.2" step="0.05">
+          <input type="number" id="nl1" min="0.1" max="3" value="1.2" step="0.05">
+          <span class="deg">m</span>
+        </div>
+      </div>
+
+      <div class="jg">
+        <div class="jh"><span class="jlabel">L₂ — Upper link</span></div>
+        <div class="jctrl">
+          <input type="range"  id="sl2" min="0.1" max="3" value="1.0" step="0.05">
+          <input type="number" id="nl2" min="0.1" max="3" value="1.0" step="0.05">
+          <span class="deg">m</span>
+        </div>
+      </div>
+
+      <div class="jg">
+        <div class="jh"><span class="jlabel">L₃ — Fore link</span></div>
+        <div class="jctrl">
+          <input type="range"  id="sl3" min="0.1" max="3" value="0.8" step="0.05">
+          <input type="number" id="nl3" min="0.1" max="3" value="0.8" step="0.05">
+          <span class="deg">m</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">End-Effector Position</div>
+      <div class="rgrid">
+        <span class="rk">x</span><span class="rv" id="ex">—</span>
+        <span class="rk">y</span><span class="rv" id="ey">—</span>
+        <span class="rk">z</span><span class="rv" id="ez">—</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">End-Effector Orientation (RPY)</div>
+      <div class="orow">
+        <div class="oitem"><span class="olbl">Roll</span><span class="oval" id="er">—</span></div>
+        <div class="oitem"><span class="olbl">Pitch</span><span class="oval" id="ep">—</span></div>
+        <div class="oitem"><span class="olbl">Yaw</span><span class="oval" id="ey2">—</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Joint Positions (world)</div>
+      <table class="jtable">
+        <thead><tr><th>Joint</th><th>x</th><th>y</th><th>z</th></tr></thead>
+        <tbody id="jtbody"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Transform Matrix T₀ → EE</div>
+      <div class="mwrap" id="mtx"></div>
+    </div>
+
+    <div class="card" id="ikMatCard" style="display:none">
+      <div class="card-title">IK Target Transform</div>
+      <div class="mwrap" id="ikMtx">
+        <div class="mrow">
+          <input class="mc mci rx" id="im00" type="number" value="1.0000" step="0.0001">
+          <input class="mc mci gy" id="im01" type="number" value="0.0000" step="0.0001">
+          <input class="mc mci bz" id="im02" type="number" value="0.0000" step="0.0001">
+          <input class="mc mci tr" id="im03" type="number" value="0.0000" step="0.0001">
+        </div>
+        <div class="mrow">
+          <input class="mc mci rx" id="im10" type="number" value="0.0000" step="0.0001">
+          <input class="mc mci gy" id="im11" type="number" value="1.0000" step="0.0001">
+          <input class="mc mci bz" id="im12" type="number" value="0.0000" step="0.0001">
+          <input class="mc mci tr" id="im13" type="number" value="0.0000" step="0.0001">
+        </div>
+        <div class="mrow">
+          <input class="mc mci rx" id="im20" type="number" value="0.0000" step="0.0001">
+          <input class="mc mci gy" id="im21" type="number" value="0.0000" step="0.0001">
+          <input class="mc mci bz" id="im22" type="number" value="1.0000" step="0.0001">
+          <input class="mc mci tr" id="im23" type="number" value="0.0000" step="0.0001">
+        </div>
+        <div class="mrow">
+          <span class="mc rx"> 0.0000</span>
+          <span class="mc gy"> 0.0000</span>
+          <span class="mc bz"> 0.0000</span>
+          <span class="mc tr"> 1.0000</span>
+        </div>
+      </div>
+      <div class="ik-actions">
+        <button class="ik-btn" id="ikGetEE">Get EE</button>
+        <button class="ik-btn" id="ikNormR">Norm R</button>
+        <label style="font-size:.72rem;color:#6060a0;cursor:pointer;display:flex;align-items:center;gap:5px">
+          <input type="checkbox" id="ikFullPose" style="accent-color:#aa44cc">Full pose
+        </label>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<script>
+// ── 4×4 Matrix (row-major) ──────────────────────────────────────────────────
+
+const I4 = () => [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1];
+
+function mmul(A, B) {
+  const R = new Array(16).fill(0);
+  for (let i = 0; i < 4; i++)
+    for (let j = 0; j < 4; j++)
+      for (let k = 0; k < 4; k++)
+        R[i*4+j] += A[i*4+k] * B[k*4+j];
+  return R;
+}
+
+const mRz = a => { const c=Math.cos(a),s=Math.sin(a); return [c,-s,0,0, s,c,0,0, 0,0,1,0, 0,0,0,1]; };
+const mRy = a => { const c=Math.cos(a),s=Math.sin(a); return [c,0,s,0, 0,1,0,0, -s,0,c,0, 0,0,0,1]; };
+const mRx = a => { const c=Math.cos(a),s=Math.sin(a); return [1,0,0,0, 0,c,-s,0, 0,s,c,0, 0,0,0,1]; };
+const mTx = d => [1,0,0,d, 0,1,0,0, 0,0,1,0, 0,0,0,1];
+const mTy = d => [1,0,0,0, 0,1,0,d, 0,0,1,0, 0,0,0,1];
+const mTz = d => [1,0,0,0, 0,1,0,0, 0,0,1,d, 0,0,0,1];
+
+const getRotM    = (ax, a) => ax==='x' ? mRx(a) : ax==='y' ? mRy(a) : mRz(a);
+const getAxisCol = (ax, F) => ax==='x' ? colX(F) : ax==='y' ? colY(F) : colZ(F);
+const ringCol    = a => a==='x' ? 'rgba(255,100,100,0.65)' : a==='y' ? 'rgba(100,210,100,0.65)' : 'rgba(160,160,255,0.65)';
+const getJointMat = (tp, ax, v) => tp==='p'
+  ? (ax==='x' ? mTx(v) : ax==='y' ? mTy(v) : mTz(v))
+  : getRotM(ax, v);
+
+// Apply 4×4 matrix to [x,y,z] point
+const apT = (M,p) => [
+  M[0]*p[0]+M[1]*p[1]+M[2]*p[2]+M[3],
+  M[4]*p[0]+M[5]*p[1]+M[6]*p[2]+M[7],
+  M[8]*p[0]+M[9]*p[1]+M[10]*p[2]+M[11],
+];
+
+// Extract column vectors (= frame axis directions in world coords)
+const colX = M => [M[0],M[4],M[8]];
+const colY = M => [M[1],M[5],M[9]];
+const colZ = M => [M[2],M[6],M[10]];
+
+const d2r = d => d*Math.PI/180;
+const r2d = r => r*180/Math.PI;
+
+function vnorm(v) {
+  const l = Math.hypot(v[0],v[1],v[2]);
+  return l>1e-10 ? [v[0]/l,v[1]/l,v[2]/l] : [1,0,0];
+}
+function cross(a,b) {
+  return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
+}
+
+// Build a frame whose Z = rotation axis and X = outgoing link direction.
+// In standard DH convention every joint's Z points along its rotation axis.
+// For Ry joints the raw FK matrix has Z elsewhere, so we rebuild it here.
+function corrFrame(rotAxis, linkDir) {
+  const z = vnorm(rotAxis);
+  // Gram-Schmidt: remove the Z component from linkDir so X ⊥ Z
+  const ld = vnorm(linkDir);
+  const dp = ld[0]*z[0] + ld[1]*z[1] + ld[2]*z[2];
+  let xr = [ld[0]-dp*z[0], ld[1]-dp*z[1], ld[2]-dp*z[2]];
+  // Fallback when linkDir is parallel to rotAxis (e.g. Rx joint, link along X)
+  if (Math.hypot(xr[0], xr[1], xr[2]) < 1e-6) {
+    const fb = Math.abs(z[0]) < 0.9 ? [1,0,0] : [0,1,0];
+    const dp2 = fb[0]*z[0] + fb[1]*z[1] + fb[2]*z[2];
+    xr = [fb[0]-dp2*z[0], fb[1]-dp2*z[1], fb[2]-dp2*z[2]];
+  }
+  const x = vnorm(xr);
+  const y = cross(x, z);  // X × Z → with Z negated below: X × Y = Z_displayed (RHR)
+  return [
+    x[0],  y[0], -z[0], 0,
+    x[1],  y[1], -z[1], 0,
+    x[2],  y[2], -z[2], 0,
+    0,     0,    0,     1,
+  ];
+}
+
+// ── Forward Kinematics ──────────────────────────────────────────────────────
+//  Link lengths (scene units):
+let A = [1.2, 1.0, 0.8];
+
+function fk(v1, v2, v3, ax1, ax2, ax3, tp1, tp2, tp3) {
+  const F1  = getJointMat(tp1, ax1, v1);
+  const F2  = mmul(mmul(F1, mTx(A[0])), getJointMat(tp2, ax2, v2));
+  const F3  = mmul(mmul(F2, mTx(A[1])), getJointMat(tp3, ax3, v3));
+  const FEE = mmul(F3, mTx(A[2]));
+  const O   = [0,0,0];
+  return {
+    frames: [F1, F2, F3, FEE],
+    pos:    [O, apT(F2,O), apT(F3,O), apT(FEE,O)],
+  };
+}
+
+// ZYX Euler angles from 4×4 rotation matrix → [roll, pitch, yaw] in degrees
+function matRPY(M) {
+  const pitch = Math.atan2(-M[8], Math.hypot(M[0],M[4]));
+  const yaw   = Math.atan2( M[4], M[0]);
+  const roll  = Math.atan2( M[9], M[10]);
+  return [r2d(roll), r2d(pitch), r2d(yaw)];
+}
+
+// ── Camera / Projection ─────────────────────────────────────────────────────
+
+let az=0.55, el=0.38, scale=145;
+let tgtAz=az, tgtEl=el, tgtScale=scale, animId=null, activeView='vIso';
+
+const canvas = document.getElementById('rc');
+const ctx    = canvas.getContext('2d');
+
+function resize() {
+  const p = canvas.parentElement;
+  canvas.width  = p.clientWidth;
+  canvas.height = p.clientHeight;
+}
+
+// Orthographic projection with orbit (az = azimuth around world Z, el = elevation)
+function proj(p) {
+  const ca=Math.cos(az), sa=Math.sin(az);
+  const x1 =  p[0]*ca + p[1]*sa;
+  const y1 = -p[0]*sa + p[1]*ca;
+  const z1 =  p[2];
+
+  const ce=Math.cos(el), se=Math.sin(el);
+  const x2 = x1;
+  const z2 = -y1*se + z1*ce;
+  const dep =  y1*ce + z1*se;
+
+  return { sx: canvas.width/2 + x2*scale, sy: canvas.height/2 - z2*scale, dep };
+}
+
+// ── Camera Animation ─────────────────────────────────────────────────────────
+
+function goTo(newAz, newEl, newScale, viewId) {
+  tgtAz=newAz; tgtEl=newEl; tgtScale=newScale;
+  if (viewId !== undefined) setActive(viewId);
+  if (animId) cancelAnimationFrame(animId);
+  animId = requestAnimationFrame(animStep);
+}
+
+function animStep() {
+  const L = 0.14;
+  az    += (tgtAz    - az)    * L;
+  el    += (tgtEl    - el)    * L;
+  scale += (tgtScale - scale) * L;
+  draw();
+  const done = Math.abs(az-tgtAz)<3e-4 && Math.abs(el-tgtEl)<3e-4 && Math.abs(scale-tgtScale)<0.2;
+  if (done) { az=tgtAz; el=tgtEl; scale=tgtScale; animId=null; draw(); }
+  else animId = requestAnimationFrame(animStep);
+}
+
+function setActive(id) {
+  activeView = id;
+  document.querySelectorAll('.vbtn').forEach(b => b.classList.toggle('active', b.id===id));
+}
+
+// ── Drawing Helpers ─────────────────────────────────────────────────────────
+
+function line3(p1, p2, col, lw, dash=[]) {
+  const a=proj(p1), b=proj(p2);
+  ctx.beginPath();
+  ctx.moveTo(a.sx, a.sy);
+  ctx.lineTo(b.sx, b.sy);
+  ctx.strokeStyle = col;
+  ctx.lineWidth   = lw;
+  ctx.lineCap     = 'round';
+  ctx.setLineDash(dash);
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function arrow3(origin, dir, len, col, lw, lbl='') {
+  const end = [origin[0]+dir[0]*len, origin[1]+dir[1]*len, origin[2]+dir[2]*len];
+  line3(origin, end, col, lw);
+
+  const a=proj(origin), b=proj(end);
+  const dx=b.sx-a.sx, dy=b.sy-a.sy;
+  const d=Math.hypot(dx,dy);
+  if (d < 2) return;
+  const ux=dx/d, uy=dy/d;
+  const AH=8, AW=4;
+
+  ctx.beginPath();
+  ctx.moveTo(b.sx, b.sy);
+  ctx.lineTo(b.sx - AH*ux - AW*uy, b.sy - AH*uy + AW*ux);
+  ctx.lineTo(b.sx - AH*ux + AW*uy, b.sy - AH*uy - AW*ux);
+  ctx.closePath();
+  ctx.fillStyle = col;
+  ctx.fill();
+
+  if (lbl) {
+    ctx.font='bold 10px Segoe UI';
+    ctx.fillStyle=col;
+    ctx.textAlign='center';
+    ctx.textBaseline='middle';
+    ctx.fillText(lbl, b.sx+ux*13, b.sy+uy*13);
+  }
+}
+
+// Draw the three frame axes (X=red, Y=green, Z=blue) at a given world position
+function drawAxes(T, pos, len, lw, num='') {
+  arrow3(pos, colX(T), len, '#ff4444', lw, 'x'+num);
+  arrow3(pos, colY(T), len, '#44cc44', lw, 'y'+num);
+  arrow3(pos, colZ(T), len, '#4466ff', lw, 'z'+num);
+}
+
+// Draw a ring (circle) in the plane perpendicular to 'axis' — shows rotation axis
+function drawRing(center, axis, r, col, lw, n=40) {
+  const ax = vnorm(axis);
+  const tmp = Math.abs(ax[0]) < 0.8 ? [1,0,0] : [0,1,0];
+  const u = vnorm(cross(ax, tmp));
+  const v = vnorm(cross(ax, u));
+
+  ctx.beginPath();
+  for (let i=0; i<=n; i++) {
+    const a=(i/n)*Math.PI*2;
+    const c=Math.cos(a), s=Math.sin(a);
+    const p=[
+      center[0]+r*(u[0]*c+v[0]*s),
+      center[1]+r*(u[1]*c+v[1]*s),
+      center[2]+r*(u[2]*c+v[2]*s),
+    ];
+    const sp=proj(p);
+    i===0 ? ctx.moveTo(sp.sx,sp.sy) : ctx.lineTo(sp.sx,sp.sy);
+  }
+  ctx.strokeStyle=col;
+  ctx.lineWidth=lw;
+  ctx.stroke();
+}
+
+// Double-headed arrow along translation axis — indicates a prismatic joint
+function drawPrismaticIndicator(center, axisVec, r, col, lw) {
+  const a = vnorm(axisVec);
+  const neg = [-a[0], -a[1], -a[2]];
+  arrow3(center, a,   r, col, lw);
+  arrow3(center, neg, r, col, lw);
+}
+
+// Draw a filled dot at projected position
+function dot3(p, r, fill, stroke) {
+  const sp=proj(p);
+  ctx.beginPath();
+  ctx.arc(sp.sx, sp.sy, r, 0, Math.PI*2);
+  ctx.fillStyle=fill;
+  ctx.fill();
+  if (stroke) {
+    ctx.strokeStyle=stroke;
+    ctx.lineWidth=1.5;
+    ctx.stroke();
+  }
+}
+
+// Draw a thick link between two 3D points with a soft glow effect
+function drawLink(p1, p2, col, lw) {
+  // outer glow
+  line3(p1, p2, col.replace(')', ',0.25)').replace('rgb','rgba'), lw+6);
+  line3(p1, p2, col, lw);
+}
+
+// Ground grid in XY plane
+function drawGrid() {
+  const N=4, step=0.5;
+  for (let i=-N; i<=N; i++) {
+    const t=i*step;
+    const gcol = i===0 ? '#30305a' : '#181830';
+    const glw  = i===0 ? 1.5 : 1;
+    line3([-N*step,t,0],[N*step,t,0], gcol, glw);
+    line3([t,-N*step,0],[t,N*step,0], gcol, glw);
+  }
+}
+
+// ── Main Draw ───────────────────────────────────────────────────────────────
+
+function jointVal(j) {
+  const raw = parseFloat(document.getElementById('n'+j).value) || 0;
+  return types[j]==='r' ? d2r(raw) : raw;
+}
+
+function draw() {
+  A[0] = parseFloat(document.getElementById('nl1').value) || 1.2;
+  A[1] = parseFloat(document.getElementById('nl2').value) || 1.0;
+  A[2] = parseFloat(document.getElementById('nl3').value) || 0.8;
+
+  const ax1=axes[1], ax2=axes[2], ax3=axes[3];
+  const tp1=types[1], tp2=types[2], tp3=types[3];
+  const {frames:[F1,F2,F3,FEE], pos:[p0,p1,p2,p3]} =
+    fk(jointVal(1), jointVal(2), jointVal(3), ax1, ax2, ax3, tp1, tp2, tp3);
+
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // Grid
+  drawGrid();
+
+  // World frame axes (very dim) at origin
+  const W=I4();
+  arrow3([0,0,0], colX(W), 0.4, 'rgba(255,80,80,0.18)',  1);
+  arrow3([0,0,0], colY(W), 0.4, 'rgba(80,200,80,0.18)',  1);
+  arrow3([0,0,0], colZ(W), 0.4, 'rgba(100,100,255,0.18)',1);
+
+  // Drop line from EE to ground
+  line3(p3, [p3[0],p3[1],0], 'rgba(120,140,220,0.25)', 1, [5,5]);
+  dot3([p3[0],p3[1],0], 3, 'rgba(120,140,220,0.4)', null);
+
+  // Links
+  drawLink(p0, p1, 'rgb(80,80,200)',  7);
+  drawLink(p1, p2, 'rgb(60,120,210)', 6);
+  drawLink(p2, p3, 'rgb(50,160,220)', 5);
+
+  // Joint indicators: ring = revolute, double arrow = prismatic
+  const ax1v=getAxisCol(ax1,W),  rc1=ringCol(ax1);
+  const ax2v=getAxisCol(ax2,F1), rc2=ringCol(ax2);
+  const ax3v=getAxisCol(ax3,F2), rc3=ringCol(ax3);
+  const drawJoint = (pos, axv, tp, r, col, lw) =>
+    tp==='r' ? drawRing(pos, axv, r, col, lw) : drawPrismaticIndicator(pos, axv, r, col, lw);
+  drawJoint(p0, ax1v, tp1, 0.18, rc1, 2.5);
+  drawJoint(p1, ax2v, tp2, 0.15, rc2, 2.5);
+  drawJoint(p2, ax3v, tp3, 0.13, rc3, 2.5);
+
+  // Frame axes — rebuild every joint so Z = rotation axis regardless of chosen axis
+  const CF1 = corrFrame(ax1v, colX(F1));
+  const CF2 = corrFrame(ax2v, colX(F2));
+  const CF3 = corrFrame(ax3v, colX(F3));
+  const AL=0.3;
+  drawAxes(CF1, p0, AL,     2.2, 0);
+  drawAxes(CF2, p1, AL,     2.2, 1);
+  drawAxes(CF3, p2, AL,     2.2, 2);
+  drawAxes(FEE, p3, AL*0.7, 1.6, 3);
+
+  // Joint nodes (drawn on top)
+  dot3(p0, 11, '#5858ee', '#9090ff');
+  dot3(p1, 10, '#4488ee', '#88bbff');
+  dot3(p2,  9, '#38b8ee', '#80ddff');
+  dot3(p3,  7, '#ffdd44', '#ffaa00');  // EE — gold
+
+  // Labels
+  const lbl = (pos, txt, col) => {
+    const sp=proj(pos);
+    ctx.font='bold 11px Segoe UI';
+    ctx.fillStyle=col;
+    ctx.textAlign='center';
+    ctx.textBaseline='bottom';
+    ctx.fillText(txt, sp.sx, sp.sy-15);
+  };
+  lbl(p0, 'J₁', '#9090ff');
+  lbl(p1, 'J₂', '#88bbff');
+  lbl(p2, 'J₃', '#80ddff');
+  lbl(p3, 'EE', '#ffdd44');
+
+  // Frame numbers — small {n} label to lower-right of each frame origin
+  const fnum = (pos, n) => {
+    const sp=proj(pos);
+    ctx.font='bold 9px Consolas';
+    ctx.fillStyle='#707090';
+    ctx.textAlign='left';
+    ctx.textBaseline='top';
+    ctx.fillText('{'+n+'}', sp.sx+7, sp.sy+5);
+  };
+  fnum(p0, 0);
+  fnum(p1, 1);
+  fnum(p2, 2);
+  fnum(p3, 3);
+
+  // IK target
+  if (ikMode) {
+    const tp=getIkPos();
+    dot3(tp, 9, '#ff44aa', '#ff88dd');
+    drawAxes(ikTargetM, tp, AL*0.6, 1.4);
+    line3(p3, tp, 'rgba(255,68,170,0.5)', 1.5, [5,4]);
+    lbl(tp, 'T', '#ff55bb');
+  }
+
+  // Camera overlay
+  const viewNames = {vIso:'Isometric',vTop:'Top (XY)',vFront:'Front (XZ)',vSide:'Side (YZ)'};
+  const vname = viewNames[activeView] || 'Custom';
+  document.getElementById('camInfo').innerHTML =
+    `<span style="color:#4a4a90;font-weight:700">${vname}</span><br>` +
+    `az ${r2d(az).toFixed(1)}°  el ${r2d(el).toFixed(1)}°  zoom ×${(scale/145).toFixed(2)}`;
+
+  updateUI(p0, p1, p2, p3, FEE);
+}
+
+// ── UI Update ────────────────────────────────────────────────────────────────
+
+function fmt(v, d=3) {
+  return (v>=0?' ':'')+v.toFixed(d);
+}
+
+function updateUI(p0, p1, p2, p3, FEE) {
+  // EE position
+  document.getElementById('ex').textContent = p3[0].toFixed(4) + ' m';
+  document.getElementById('ey').textContent = p3[1].toFixed(4) + ' m';
+  document.getElementById('ez').textContent = p3[2].toFixed(4) + ' m';
+
+  // RPY
+  const [roll,pitch,yaw] = matRPY(FEE);
+  document.getElementById('er').textContent  = roll.toFixed(1)+'°';
+  document.getElementById('ep').textContent  = pitch.toFixed(1)+'°';
+  document.getElementById('ey2').textContent = yaw.toFixed(1)+'°';
+
+  // Joint positions table
+  const rows = [['J₁',p0],['J₂',p1],['J₃',p2],['EE',p3]].map(([n,p])=>
+    `<tr>
+      <td class="jname">${n}</td>
+      <td>${p[0].toFixed(3)}</td>
+      <td>${p[1].toFixed(3)}</td>
+      <td>${p[2].toFixed(3)}</td>
+    </tr>`
+  ).join('');
+  document.getElementById('jtbody').innerHTML = rows;
+
+  // Transform matrix
+  const html = [0,1,2,3].map(r => {
+    const cells = [0,1,2,3].map(c => {
+      const cls = ['rx','gy','bz','tr'][c];
+      return `<span class="mc ${cls}">${fmt(FEE[r*4+c])}</span>`;
+    }).join('');
+    return `<div class="mrow">${cells}</div>`;
+  }).join('');
+  document.getElementById('mtx').innerHTML = html;
+}
+
+// ── Inverse Kinematics ───────────────────────────────────────────────────────
+
+let ikMode=false, ikAnimId=null, ikTargetDragging=false;
+let ikTargetM=[1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1];
+let ikFullPose=false;
+
+const vdot = (a,b) => a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+
+function getIkPos() { return [ikTargetM[3], ikTargetM[7], ikTargetM[11]]; }
+
+function syncIkMatrixToUI() {
+  for (let r=0; r<3; r++)
+    for (let c=0; c<4; c++) {
+      const el=document.getElementById('im'+r+c);
+      if (el) el.value = ikTargetM[r*4+c].toFixed(4);
+    }
+}
+
+function normalizeIkRotation() {
+  let x=vnorm([ikTargetM[0],ikTargetM[4],ikTargetM[8]]);
+  let y=[ikTargetM[1],ikTargetM[5],ikTargetM[9]];
+  const d=vdot(y,x);
+  y=vnorm([y[0]-d*x[0],y[1]-d*x[1],y[2]-d*x[2]]);
+  const z=cross(x,y);
+  ikTargetM[0]=x[0]; ikTargetM[4]=x[1]; ikTargetM[8]=x[2];
+  ikTargetM[1]=y[0]; ikTargetM[5]=y[1]; ikTargetM[9]=y[2];
+  ikTargetM[2]=z[0]; ikTargetM[6]=z[1]; ikTargetM[10]=z[2];
+  syncIkMatrixToUI();
+}
+
+function setJointVal(j, rawVal) {
+  const n=document.getElementById('n'+j), s=document.getElementById('s'+j);
+  const dv = types[j]==='r' ? r2d(rawVal) : rawVal;
+  const c  = Math.max(parseFloat(n.min), Math.min(parseFloat(n.max), dv));
+  n.value = s.value = c.toFixed(types[j]==='r' ? 2 : 4);
+}
+
+function ikStep() {
+  const ax1=axes[1], ax2=axes[2], ax3=axes[3];
+  const tp1=types[1], tp2=types[2], tp3=types[3];
+  const v1=jointVal(1), v2=jointVal(2), v3=jointVal(3);
+  const {frames:[F1,F2,F3,FEE], pos:[p0,p1,p2,p3]} = fk(v1,v2,v3,ax1,ax2,ax3,tp1,tp2,tp3);
+
+  // Position error
+  const pd=getIkPos();
+  const ep=[pd[0]-p3[0], pd[1]-p3[1], pd[2]-p3[2]];
+
+  // Orientation error: e_ω = 0.5*(xe×xd + ye×yd + ze×zd)
+  const xe=colX(FEE), ye=colY(FEE), ze=colZ(FEE);
+  const xd=colX(ikTargetM), yd=colY(ikTargetM), zd=colZ(ikTargetM);
+  const c1=cross(xe,xd), c2=cross(ye,yd), c3=cross(ze,zd);
+  const eo=ikFullPose ? [
+    0.5*(c1[0]+c2[0]+c3[0]),
+    0.5*(c1[1]+c2[1]+c3[1]),
+    0.5*(c1[2]+c2[2]+c3[2]),
+  ] : [0,0,0];
+
+  if (vdot(ep,ep)<1e-8 && vdot(eo,eo)<1e-8) return;
+
+  const W=I4();
+  const z1=getAxisCol(ax1,W), z2=getAxisCol(ax2,F1), z3=getAxisCol(ax3,F2);
+
+  // Linear velocity Jacobian columns
+  const jcol=(tp,z,pj) => tp==='r'
+    ? cross(z,[p3[0]-pj[0],p3[1]-pj[1],p3[2]-pj[2]])
+    : [z[0],z[1],z[2]];
+  const jv1=jcol(tp1,z1,p0), jv2=jcol(tp2,z2,p1), jv3=jcol(tp3,z3,p2);
+
+  // Angular velocity Jacobian columns (z for revolute, 0 for prismatic)
+  const jw1=tp1==='r'?z1:[0,0,0];
+  const jw2=tp2==='r'?z2:[0,0,0];
+  const jw3=tp3==='r'?z3:[0,0,0];
+
+  const wp=1.0, wo=0.5;
+  const dq1=wp*vdot(jv1,ep)+wo*vdot(jw1,eo);
+  const dq2=wp*vdot(jv2,ep)+wo*vdot(jw2,eo);
+  const dq3=wp*vdot(jv3,ep)+wo*vdot(jw3,eo);
+
+  const Jvdq=[jv1[0]*dq1+jv2[0]*dq2+jv3[0]*dq3,
+              jv1[1]*dq1+jv2[1]*dq2+jv3[1]*dq3,
+              jv1[2]*dq1+jv2[2]*dq2+jv3[2]*dq3];
+  const Jwdq=[jw1[0]*dq1+jw2[0]*dq2+jw3[0]*dq3,
+              jw1[1]*dq1+jw2[1]*dq2+jw3[1]*dq3,
+              jw1[2]*dq1+jw2[2]*dq2+jw3[2]*dq3];
+
+  const dqn=dq1*dq1+dq2*dq2+dq3*dq3;
+  if (dqn < 1e-12) return;
+  const alpha=dqn/(wp*wp*vdot(Jvdq,Jvdq)+wo*wo*vdot(Jwdq,Jwdq)+0.01);
+
+  setJointVal(1, v1+alpha*dq1);
+  setJointVal(2, v2+alpha*dq2);
+  setJointVal(3, v3+alpha*dq3);
+}
+
+function ikLoop() {
+  if (!ikMode) { ikAnimId=null; return; }
+  for (let i=0; i<10; i++) ikStep();
+  draw();
+  ikAnimId = requestAnimationFrame(ikLoop);
+}
+
+function moveIkTarget(dx, dy) {
+  const sr=[Math.cos(az), Math.sin(az), 0];
+  const su=[Math.sin(az)*Math.sin(el), -Math.cos(az)*Math.sin(el), Math.cos(el)];
+  ikTargetM[3]  += (dx*sr[0] - dy*su[0]) / scale;
+  ikTargetM[7]  += (dx*sr[1] - dy*su[1]) / scale;
+  ikTargetM[11] += (dx*sr[2] - dy*su[2]) / scale;
+  syncIkMatrixToUI();
+}
+
+function nearIkTarget(cx, cy) {
+  if (!ikMode) return false;
+  const sp=proj(getIkPos());
+  return Math.hypot(cx-sp.sx, cy-sp.sy) < 22;
+}
+
+// ── Mouse / Touch Orbit ──────────────────────────────────────────────────────
+
+let dragging=false, lx=0, ly=0, pinchDist0=0;
+
+function stopAnim() {
+  if (animId) { cancelAnimationFrame(animId); animId=null; }
+  activeView='';
+  document.querySelectorAll('.vbtn:not(.fit)').forEach(b=>b.classList.remove('active'));
+}
+
+canvas.addEventListener('mousedown', e => {
+  if (nearIkTarget(e.clientX, e.clientY)) {
+    ikTargetDragging=true;
+  } else {
+    stopAnim(); dragging=true;
+  }
+  lx=e.clientX; ly=e.clientY;
+});
+window.addEventListener('mouseup', () => { dragging=false; ikTargetDragging=false; });
+window.addEventListener('mousemove', e => {
+  const dx=e.clientX-lx, dy=e.clientY-ly;
+  lx=e.clientX; ly=e.clientY;
+  if (ikTargetDragging) { moveIkTarget(dx,dy); if (!ikAnimId) draw(); return; }
+  if (!dragging) return;
+  az += dx*0.007;
+  el  = Math.max(-1.56, Math.min(1.56, el+dy*0.007));
+  tgtAz=az; tgtEl=el;
+  draw();
+});
+
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  scale = tgtScale = Math.max(50, Math.min(500, scale*(e.deltaY>0?0.92:1.09)));
+  draw();
+}, {passive:false});
+
+canvas.addEventListener('touchstart', e => {
+  stopAnim();
+  if (e.touches.length===1) {
+    const t0=e.touches[0];
+    if (nearIkTarget(t0.clientX, t0.clientY)) { ikTargetDragging=true; }
+    else { dragging=true; }
+    lx=t0.clientX; ly=t0.clientY;
+  } else if (e.touches.length===2) {
+    dragging=false; ikTargetDragging=false;
+    pinchDist0=Math.hypot(
+      e.touches[1].clientX-e.touches[0].clientX,
+      e.touches[1].clientY-e.touches[0].clientY
+    );
+  }
+}, {passive:true});
+canvas.addEventListener('touchend', e => {
+  if (e.touches.length===0) { dragging=false; ikTargetDragging=false; }
+});
+canvas.addEventListener('touchmove', e => {
+  if (e.touches.length===2) {
+    e.preventDefault();
+    const d=Math.hypot(
+      e.touches[1].clientX-e.touches[0].clientX,
+      e.touches[1].clientY-e.touches[0].clientY
+    );
+    if (pinchDist0>0) scale=tgtScale=Math.max(50,Math.min(500,scale*(d/pinchDist0)));
+    pinchDist0=d;
+    draw(); return;
+  }
+  if (e.touches.length!==1) return;
+  const t0=e.touches[0];
+  const dx=t0.clientX-lx, dy=t0.clientY-ly;
+  lx=t0.clientX; ly=t0.clientY;
+  if (ikTargetDragging) {
+    e.preventDefault();
+    moveIkTarget(dx,dy); if (!ikAnimId) draw(); return;
+  }
+  if (!dragging) return;
+  e.preventDefault();
+  az += dx*0.007;
+  el  = Math.max(-1.56, Math.min(1.56, el+dy*0.007));
+  tgtAz=az; tgtEl=el;
+  draw();
+}, {passive:false});
+
+// ── Joint Type & Axis ────────────────────────────────────────────────────────
+
+const axes  = { 1:'z', 2:'y', 3:'y' };
+const types = { 1:'r', 2:'r', 3:'r' };
+
+const JOINT_NAMES = { 1:'Base', 2:'Shoulder', 3:'Elbow' };
+const SUB = ['₁','₂','₃'];
+
+function setJointType(j, tp) {
+  types[j] = tp;
+  const s   = document.getElementById('s'+j);
+  const n   = document.getElementById('n'+j);
+  const u   = document.getElementById('u'+j);
+  const lbl = document.getElementById('jl'+j);
+  if (tp === 'p') {
+    s.min = n.min = -2;  s.max = n.max = 2;  s.step = n.step = 0.05;
+    s.value = n.value = 0;
+    u.textContent = 'm';
+    lbl.textContent = `d${SUB[j-1]} — ${JOINT_NAMES[j]}`;
+  } else {
+    const [mn,mx] = j===1 ? [-180,180] : [-150,150];
+    s.min = n.min = mn;  s.max = n.max = mx;  s.step = n.step = 1;
+    s.value = n.value = 0;
+    u.textContent = '°';
+    lbl.textContent = `θ${SUB[j-1]} — ${JOINT_NAMES[j]}`;
+  }
+  draw();
+}
+
+document.querySelectorAll('.typbtn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const j=btn.dataset.j, t=btn.dataset.t;
+    document.querySelectorAll(`.typbtn[data-j="${j}"]`).forEach(b =>
+      b.classList.toggle('active', b.dataset.t===t)
+    );
+    setJointType(+j, t);
+  });
+});
+
+document.querySelectorAll('.axbtn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const j=btn.dataset.j, a=btn.dataset.a;
+    axes[j]=a;
+    document.querySelectorAll(`.axbtn[data-j="${j}"]`).forEach(b =>
+      b.classList.toggle('active', b.dataset.a===a)
+    );
+    draw();
+  });
+});
+
+// ── Input Sync ───────────────────────────────────────────────────────────────
+
+function sync(sid, nid) {
+  const sl=document.getElementById(sid), nu=document.getElementById(nid);
+  sl.addEventListener('input', () => { nu.value=sl.value; draw(); });
+  nu.addEventListener('change', () => {
+    const v=Math.max(parseFloat(nu.min),Math.min(parseFloat(nu.max),parseFloat(nu.value)||0));
+    nu.value=v; sl.value=v; draw();
+  });
+  nu.addEventListener('keydown', e => { if(e.key==='Enter') nu.dispatchEvent(new Event('change')); });
+}
+sync('s1','n1');
+sync('s2','n2');
+sync('s3','n3');
+sync('sl1','nl1');
+sync('sl2','nl2');
+sync('sl3','nl3');
+
+// ── View Presets ─────────────────────────────────────────────────────────────
+
+const PI2 = Math.PI / 2;
+const VIEWS = {
+  vIso:   [0.55,  0.38,  145],
+  vTop:   [0,     PI2,   145],
+  vFront: [0,     0,     145],
+  vSide:  [PI2,   0,     145],
+};
+
+document.querySelectorAll('.vbtn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    if (btn.id==='vFit') { tgtScale=145; if (!animId) animId=requestAnimationFrame(animStep); return; }
+    if (btn.id==='vIK') return;  // handled separately below
+    const [a, e, s] = VIEWS[btn.id];
+    goTo(a, e, s, btn.id);
+  });
+});
+
+document.getElementById('vIK').addEventListener('click', () => {
+  ikMode = !ikMode;
+  document.getElementById('vIK').classList.toggle('ik-on', ikMode);
+  document.getElementById('ikMatCard').style.display = ikMode ? 'block' : 'none';
+  if (ikMode) {
+    // Seed target at current EE frame
+    const {frames:[,,,FEE]} = fk(jointVal(1),jointVal(2),jointVal(3),axes[1],axes[2],axes[3],types[1],types[2],types[3]);
+    ikTargetM = [...FEE];
+    syncIkMatrixToUI();
+    if (!ikAnimId) ikLoop();
+  } else {
+    if (ikAnimId) { cancelAnimationFrame(ikAnimId); ikAnimId=null; }
+  }
+  draw();
+});
+
+// ── IK Matrix UI ─────────────────────────────────────────────────────────────
+
+document.getElementById('ikGetEE').addEventListener('click', () => {
+  const {frames:[,,,FEE]} = fk(jointVal(1),jointVal(2),jointVal(3),axes[1],axes[2],axes[3],types[1],types[2],types[3]);
+  ikTargetM = [...FEE];
+  syncIkMatrixToUI();
+});
+
+document.getElementById('ikNormR').addEventListener('click', () => {
+  for (let r=0; r<3; r++)
+    for (let c=0; c<4; c++) {
+      const el=document.getElementById('im'+r+c);
+      if (el) ikTargetM[r*4+c]=parseFloat(el.value)||0;
+    }
+  normalizeIkRotation();
+});
+
+document.getElementById('ikFullPose').addEventListener('change', function() {
+  ikFullPose = this.checked;
+});
+
+// Sync any manually edited cell back to ikTargetM immediately
+for (let r=0; r<3; r++)
+  for (let c=0; c<4; c++) {
+    const el=document.getElementById('im'+r+c);
+    const idx=r*4+c;
+    const commit=()=>{ ikTargetM[idx]=parseFloat(el.value)||0; };
+    el.addEventListener('change', commit);
+    el.addEventListener('keydown', e=>{ if(e.key==='Enter') commit(); });
+  }
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+
+window.addEventListener('resize', () => { resize(); draw(); });
+resize();
+setActive('vIso');
+draw();
+</script>
+</body>
+</html>
