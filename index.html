@@ -175,6 +175,15 @@
   .olbl { display: block; font-size: .64rem; color: #55558a; margin-bottom: 2px; }
   .oval { font-size: .78rem; font-family: 'Consolas', monospace; color: #b0d8f0; }
 
+  /* Relative transform sub-label */
+  .mlbl {
+    font-size: .67rem;
+    font-family: 'Consolas', monospace;
+    color: #5a5a88;
+    margin: 10px 0 4px;
+  }
+  .mlbl:first-child { margin-top: 2px; }
+
   /* Matrix */
   .mwrap {
     font-family: 'Consolas', monospace;
@@ -496,6 +505,11 @@
     <div class="card">
       <div class="card-title">Transform Matrix T₀ → EE</div>
       <div class="mwrap" id="mtx"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Relative Transforms</div>
+      <div id="relMtx"></div>
     </div>
 
     <div class="card" id="ikMatCard" style="display:none">
@@ -823,19 +837,28 @@ function draw() {
 
   const ax1=axes[1], ax2=axes[2], ax3=axes[3];
   const tp1=types[1], tp2=types[2], tp3=types[3];
+  const v1=jointVal(1), v2=jointVal(2), v3=jointVal(3);
   const {frames:[F1,F2,F3,FEE], pos:[p0,p1,p2,p3]} =
-    fk(jointVal(1), jointVal(2), jointVal(3), ax1, ax2, ax3, tp1, tp2, tp3);
+    fk(v1, v2, v3, ax1, ax2, ax3, tp1, tp2, tp3);
+  const T01 = getJointMat(tp1, ax1, v1);
+  const T12 = mmul(mTx(A[0]), getJointMat(tp2, ax2, v2));
+  const T23 = mmul(mTx(A[1]), getJointMat(tp3, ax3, v3));
+  const T3E = mTx(A[2]);
 
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
   // Grid
   drawGrid();
 
-  // World frame axes (very dim) at origin
+  // World frame (fixed reference)
   const W=I4();
-  arrow3([0,0,0], colX(W), 0.4, 'rgba(255,80,80,0.18)',  1);
-  arrow3([0,0,0], colY(W), 0.4, 'rgba(80,200,80,0.18)',  1);
-  arrow3([0,0,0], colZ(W), 0.4, 'rgba(100,100,255,0.18)',1);
+  arrow3([0,0,0], colX(W), 0.5, 'rgba(255,90,90,0.65)',  2, 'xW');
+  arrow3([0,0,0], colY(W), 0.5, 'rgba(80,210,80,0.65)',  2, 'yW');
+  arrow3([0,0,0], colZ(W), 0.5, 'rgba(120,145,255,0.65)',2, 'zW');
+  { const sp=proj([0,0,0]);
+    ctx.font='bold 9px Consolas'; ctx.fillStyle='#707088';
+    ctx.textAlign='right'; ctx.textBaseline='bottom';
+    ctx.fillText('{W}', sp.sx-8, sp.sy-4); }
 
   // Drop line from EE to ground
   line3(p3, [p3[0],p3[1],0], 'rgba(120,140,220,0.25)', 1, [5,5]);
@@ -916,7 +939,7 @@ function draw() {
     `<span style="color:#4a4a90;font-weight:700">${vname}</span><br>` +
     `az ${r2d(az).toFixed(1)}°  el ${r2d(el).toFixed(1)}°  zoom ×${(scale/145).toFixed(2)}`;
 
-  updateUI(p0, p1, p2, p3, FEE);
+  updateUI(p0, p1, p2, p3, FEE, T01, T12, T23, T3E);
 }
 
 // ── UI Update ────────────────────────────────────────────────────────────────
@@ -925,7 +948,15 @@ function fmt(v, d=3) {
   return (v>=0?' ':'')+v.toFixed(d);
 }
 
-function updateUI(p0, p1, p2, p3, FEE) {
+function fmtMat(M) {
+  return [0,1,2,3].map(r =>
+    `<div class="mrow">${[0,1,2,3].map(c =>
+      `<span class="mc ${['rx','gy','bz','tr'][c]}">${fmt(M[r*4+c])}</span>`
+    ).join('')}</div>`
+  ).join('');
+}
+
+function updateUI(p0, p1, p2, p3, FEE, T01, T12, T23, T3E) {
   // EE position
   document.getElementById('ex').textContent = p3[0].toFixed(4) + ' m';
   document.getElementById('ey').textContent = p3[1].toFixed(4) + ' m';
@@ -957,6 +988,15 @@ function updateUI(p0, p1, p2, p3, FEE) {
     return `<div class="mrow">${cells}</div>`;
   }).join('');
   document.getElementById('mtx').innerHTML = html;
+
+  // Relative transforms per joint
+  const mblock = (lbl, M) =>
+    `<div class="mlbl">${lbl}</div><div class="mwrap">${fmtMat(M)}</div>`;
+  document.getElementById('relMtx').innerHTML =
+    mblock('⁰T₁ &nbsp;<span style="color:#3d3d60">World → J₁</span>',  T01) +
+    mblock('¹T₂ &nbsp;<span style="color:#3d3d60">J₁ → J₂</span>',    T12) +
+    mblock('²T₃ &nbsp;<span style="color:#3d3d60">J₂ → J₃</span>',    T23) +
+    mblock('³Tₑ &nbsp;<span style="color:#3d3d60">J₃ → EE</span>',    T3E);
 }
 
 // ── Inverse Kinematics ───────────────────────────────────────────────────────
