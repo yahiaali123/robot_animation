@@ -347,7 +347,7 @@
 
 <header>
   <h1>3-DOF Robot — Forward Kinematics</h1>
-  <span class="hint">Drag to orbit &nbsp;·&nbsp; Scroll / pinch to zoom</span>
+  <span class="hint">Left-drag to orbit &nbsp;·&nbsp; Middle-drag to pan &nbsp;·&nbsp; Scroll / pinch to zoom</span>
 </header>
 
 <main>
@@ -642,6 +642,7 @@ function matRPY(M) {
 
 let az=0.55, el=0.38, scale=145;
 let tgtAz=az, tgtEl=el, tgtScale=scale, animId=null, activeView='vIso';
+let panX=0, panY=0;
 
 const canvas = document.getElementById('rc');
 const ctx    = canvas.getContext('2d');
@@ -664,13 +665,14 @@ function proj(p) {
   const z2 = -y1*se + z1*ce;
   const dep =  y1*ce + z1*se;
 
-  return { sx: canvas.width/2 + x2*scale, sy: canvas.height/2 - z2*scale, dep };
+  return { sx: canvas.width/2 + panX + x2*scale, sy: canvas.height/2 + panY - z2*scale, dep };
 }
 
 // ── Camera Animation ─────────────────────────────────────────────────────────
 
 function goTo(newAz, newEl, newScale, viewId) {
   tgtAz=newAz; tgtEl=newEl; tgtScale=newScale;
+  panX=0; panY=0;
   if (viewId !== undefined) setActive(viewId);
   if (animId) cancelAnimationFrame(animId);
   animId = requestAnimationFrame(animStep);
@@ -1075,7 +1077,7 @@ function nearIkTarget(cx, cy) {
 
 // ── Mouse / Touch Orbit ──────────────────────────────────────────────────────
 
-let dragging=false, lx=0, ly=0, pinchDist0=0;
+let dragging=false, panning=false, lx=0, ly=0, pinchDist0=0, pinchMid0=null;
 
 function stopAnim() {
   if (animId) { cancelAnimationFrame(animId); animId=null; }
@@ -1084,18 +1086,26 @@ function stopAnim() {
 }
 
 canvas.addEventListener('mousedown', e => {
-  if (nearIkTarget(e.clientX, e.clientY)) {
+  if (e.button === 1) {
+    e.preventDefault();
+    panning=true;
+  } else if (nearIkTarget(e.clientX, e.clientY)) {
     ikTargetDragging=true;
-  } else {
+  } else if (e.button === 0) {
     stopAnim(); dragging=true;
   }
   lx=e.clientX; ly=e.clientY;
 });
-window.addEventListener('mouseup', () => { dragging=false; ikTargetDragging=false; });
+canvas.addEventListener('auxclick', e => { if (e.button===1) e.preventDefault(); });
+window.addEventListener('mouseup', e => {
+  if (e.button===1) panning=false;
+  else { dragging=false; ikTargetDragging=false; }
+});
 window.addEventListener('mousemove', e => {
   const dx=e.clientX-lx, dy=e.clientY-ly;
   lx=e.clientX; ly=e.clientY;
   if (ikTargetDragging) { moveIkTarget(dx,dy); if (!ikAnimId) draw(); return; }
+  if (panning) { panX+=dx; panY+=dy; draw(); return; }
   if (!dragging) return;
   az += dx*0.007;
   el  = Math.max(-1.56, Math.min(1.56, el+dy*0.007));
@@ -1234,7 +1244,7 @@ const VIEWS = {
 
 document.querySelectorAll('.vbtn').forEach(btn => {
   btn.addEventListener('click', () => {
-    if (btn.id==='vFit') { tgtScale=145; if (!animId) animId=requestAnimationFrame(animStep); return; }
+    if (btn.id==='vFit') { tgtScale=145; panX=0; panY=0; if (!animId) animId=requestAnimationFrame(animStep); return; }
     if (btn.id==='vIK') return;  // handled separately below
     const [a, e, s] = VIEWS[btn.id];
     goTo(a, e, s, btn.id);
