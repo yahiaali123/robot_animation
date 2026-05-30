@@ -1258,6 +1258,11 @@
         </div>
 
         <div class="card">
+          <div class="card-title">Joint Offsets</div>
+          <div id="offsetConfigContainer"></div>
+        </div>
+
+        <div class="card">
           <div class="card-title">Joint Velocities</div>
           <div id="velConfigContainer"></div>
         </div>
@@ -1436,12 +1441,11 @@
       const mTy = (d) => [1, 0, 0, 0, 0, 1, 0, d, 0, 0, 1, 0, 0, 0, 0, 1];
       const mTz = (d) => [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, d, 0, 0, 0, 1];
 
-      const getRotM = (ax, a) => (ax === "x" ? mRx(a) : ax === "y" ? mRy(a) : mRz(a));
+      const getAlignMat = (ax) => (ax === "x" ? mRy(Math.PI / 2) : ax === "y" ? mRx(-Math.PI / 2) : I4());
       const getAxisCol = (ax, F) => (ax === "x" ? colX(F) : ax === "y" ? colY(F) : colZ(F));
       const ringCol = (a) =>
         a === "x" ? "rgba(255,100,100,0.65)" : a === "y" ? "rgba(100,210,100,0.65)" : "rgba(160,160,255,0.65)";
-      const getJointMat = (tp, ax, v) =>
-        tp === "p" ? (ax === "x" ? mTx(v) : ax === "y" ? mTy(v) : mTz(v)) : getRotM(ax, v);
+      const getJointMat = (tp, ax, v) => mmul(getAlignMat(ax), tp === "p" ? mTz(v) : mRz(v));
 
       const apT = (M, p) => [
         M[0] * p[0] + M[1] * p[1] + M[2] * p[2] + M[3],
@@ -1487,7 +1491,7 @@
 
       const JOINT_LABEL = ["Base", "Shoulder", "Elbow", "Wrist", "Wrist 2", "Wrist 3", "Wrist 4", "Wrist 5"];
       const LINK_LABEL = ["Base link", "Upper link", "Fore link", "Wrist link", "Link 5", "Link 6", "Link 7", "Link 8"];
-      const AXIS_DEF = ["z", "y", "y", "y", "z", "y", "z", "y"];
+      const AXIS_DEF = ["z", "y", "z", "z", "z", "z", "z", "z"];
       const ANGLE_DEF = [30, 45, -30, 0, 0, 0, 0, 0];
       const LEN_DEF = [1.2, 1.0, 0.8, 0.6, 0.5, 0.4, 0.35, 0.3];
       const SUBS = ["₁", "₂", "₃", "₄", "₅", "₆", "₇", "₈"];
@@ -1495,11 +1499,13 @@
 
       const axes = {};
       const types = {};
+      const offsets = {};
       let A = [...LEN_DEF];
 
       for (let j = 1; j <= MAX_DOF; j++) {
         axes[j] = AXIS_DEF[j - 1];
         types[j] = "r";
+        offsets[j] = 0;
       }
 
       // ── Forward Kinematics (N-DOF) ──────────────────────────────────────────────
@@ -1509,21 +1515,24 @@
 
       function fkN() {
         const O = [0, 0, 0];
-        const pos = [O];
+        const pos = [];
         const frames = [];
         let F = I4();
 
         for (let i = 0; i < numDOF; i++) {
           const j = i + 1;
+          // axes[i] is the previous joint's axis (1-indexed); 'x' joints extend along their
+          // local Z (the spin axis) so the arm continues forward instead of kinking sideways.
+          const linkFn = i > 0 && axes[i] === "x" ? mTz : mTx;
           F =
             i === 0
-              ? getJointMat(types[j], axes[j], jointVal(j))
-              : mmul(mmul(F, mTx(A[i - 1])), getJointMat(types[j], axes[j], jointVal(j)));
+              ? mmul(mTz(offsets[j]), getJointMat(types[j], axes[j], jointVal(j)))
+              : mmul(mmul(mmul(F, linkFn(A[i - 1])), mTz(offsets[j])), getJointMat(types[j], axes[j], jointVal(j)));
           frames.push(F);
-          if (i > 0) pos.push(apT(F, O));
+          pos.push(apT(F, O));
         }
 
-        const FEE = mmul(F, mTx(A[numDOF - 1]));
+        const FEE = mmul(F, (axes[numDOF] === "x" ? mTz : mTx)(A[numDOF - 1]));
         frames.push(FEE);
         pos.push(apT(FEE, O));
 
@@ -1534,13 +1543,14 @@
         const relT = [];
         for (let i = 0; i < numDOF; i++) {
           const j = i + 1;
+          const linkFn = i > 0 && axes[i] === "x" ? mTz : mTx;
           relT.push(
             i === 0
-              ? getJointMat(types[j], axes[j], jointVal(j))
-              : mmul(mTx(A[i - 1]), getJointMat(types[j], axes[j], jointVal(j))),
+              ? mmul(mTz(offsets[j]), getJointMat(types[j], axes[j], jointVal(j)))
+              : mmul(mmul(linkFn(A[i - 1]), mTz(offsets[j])), getJointMat(types[j], axes[j], jointVal(j))),
           );
         }
-        relT.push(mTx(A[numDOF - 1]));
+        relT.push((axes[numDOF] === "x" ? mTz : mTx)(A[numDOF - 1]));
         return relT;
       }
 
@@ -1549,11 +1559,10 @@
       // Returns N columns [jvx,jvy,jvz,jwx,jwy,jwz] — the geometric Jacobian
       function computeJacobian(frames, pos) {
         const N = numDOF,
-          pEE = pos[N],
-          W = I4();
+          pEE = pos[N];
         return Array.from({ length: N }, (_, i) => {
           const j = i + 1;
-          const z = getAxisCol(axes[j], i === 0 ? W : frames[i - 1]);
+          const z = colZ(frames[i]);
           if (types[j] === "r") {
             const dp = [pEE[0] - pos[i][0], pEE[1] - pos[i][1], pEE[2] - pos[i][2]];
             const jv = cross(z, dp);
@@ -1787,6 +1796,10 @@
           const el = document.getElementById("nl" + (i + 1));
           if (el) A[i] = parseFloat(el.value) || LEN_DEF[i];
         }
+        for (let i = 0; i < numDOF; i++) {
+          const el = document.getElementById("no" + (i + 1));
+          if (el) offsets[i + 1] = parseFloat(el.value) || 0;
+        }
 
         const { frames, pos } = fkN();
         const N = numDOF;
@@ -1817,6 +1830,9 @@
         line3(pEE, [pEE[0], pEE[1], 0], "rgba(120,140,220,0.25)", 1, [5, 5]);
         dot3([pEE[0], pEE[1], 0], 3, "rgba(120,140,220,0.4)", null);
 
+        // Base stem (world origin → joint 1, shows Z-offset of first joint)
+        line3([0, 0, 0], pos[0], lightMode ? "rgba(150,150,200,0.55)" : "rgba(70,70,110,0.55)", 1.5, [4, 3]);
+
         // Links
         for (let i = 0; i < N; i++) {
           const t = N > 1 ? i / (N - 1) : 0;
@@ -1827,8 +1843,7 @@
         // Joints, frames, labels
         for (let i = 0; i < N; i++) {
           const j = i + 1;
-          const prevFrame = i === 0 ? W : frames[i - 1];
-          const axv = getAxisCol(axes[j], prevFrame);
+          const axv = colZ(frames[i]);
           const t = N > 1 ? i / (N - 1) : 0;
           const fill = lerpRGB(t, [88, 88, 238], [56, 184, 238]);
           const stroke = lerpRGB(t, [144, 144, 255], [128, 221, 255]);
@@ -1939,7 +1954,11 @@
       // C·M·C where C = diag(1,−1,1,1): correct change-of-basis for the reversed Y convention
       function applyYConv(M) {
         const R = [...M];
-        R[1] = -M[1]; R[4] = -M[4]; R[6] = -M[6]; R[7] = -M[7]; R[9] = -M[9];
+        R[1] = -M[1];
+        R[4] = -M[4];
+        R[6] = -M[6];
+        R[7] = -M[7];
+        R[9] = -M[9];
         return R;
       }
 
@@ -1998,8 +2017,8 @@
         if (J && eeV && eeW) {
           const ids = ["ee_vx", "ee_vy", "ee_vz", "ee_wx", "ee_wy", "ee_wz"];
           const vals = [...eeV, ...eeW];
-          vals[1] = -vals[1];  // vy
-          vals[4] = -vals[4];  // ωy
+          vals[1] = -vals[1]; // vy
+          vals[4] = -vals[4]; // ωy
           ids.forEach((id, k) => {
             const el = document.getElementById(id);
             if (el) el.textContent = vals[k].toFixed(4);
@@ -2020,7 +2039,8 @@
             if (r === 3) jHtml += '<tr class="jac-sep"><td colspan="' + (N + 1) + '"></td></tr>';
             const cls = r < 3 ? "jac-v" : "jac-w";
             jHtml += `<tr><td class="jac-rl ${cls}">${rowLabels[r]}</td>`;
-            for (let i = 0; i < N; i++) jHtml += `<td class="${cls}">${fmt((r === 1 || r === 4) ? -J[i][r] : J[i][r], 3)}</td>`;
+            for (let i = 0; i < N; i++)
+              jHtml += `<td class="${cls}">${fmt(r === 1 || r === 4 ? -J[i][r] : J[i][r], 3)}</td>`;
             jHtml += "</tr>";
           }
           jHtml += "</tbody></table>";
@@ -2143,6 +2163,27 @@
         for (let j = 1; j <= numDOF; j++) sync("sl" + j, "nl" + j);
       }
 
+      function buildOffsetConfig() {
+        let html = "";
+        for (let i = 0; i < numDOF; i++) {
+          const j = i + 1;
+          const val = (offsets[j] || 0).toFixed(2);
+          html += `<div class="jg">
+      <div class="jh"><span class="jlabel">d${SUBS[i]} — ${JOINT_LABEL[i]}</span></div>
+      <div class="jctrl">
+        <input type="range"  id="so${j}" min="-2" max="2" value="${val}" step="0.05">
+        <input type="number" id="no${j}" min="-2" max="2" value="${val}" step="0.05">
+        <span class="deg">m</span>
+      </div>
+    </div>`;
+        }
+        document.getElementById("offsetConfigContainer").innerHTML = html;
+      }
+
+      function attachOffsetListeners() {
+        for (let j = 1; j <= numDOF; j++) sync("so" + j, "no" + j);
+      }
+
       function buildVelocityConfig() {
         let html = "";
         for (let j = 1; j <= numDOF; j++) {
@@ -2209,7 +2250,8 @@
       function setDOF(n) {
         // Snapshot current joint values before rebuilding
         const savedAngles = {},
-          savedLens = {};
+          savedLens = {},
+          savedOffsets = {};
         for (let j = 1; j <= numDOF; j++) {
           const el = document.getElementById("n" + j);
           if (el) savedAngles[j] = el.value;
@@ -2219,6 +2261,13 @@
           if (el) {
             A[i] = parseFloat(el.value) || LEN_DEF[i];
             savedLens[i] = A[i];
+          }
+        }
+        for (let j = 1; j <= numDOF; j++) {
+          const el = document.getElementById("no" + j);
+          if (el) {
+            offsets[j] = parseFloat(el.value) || 0;
+            savedOffsets[j] = offsets[j];
           }
         }
 
@@ -2233,9 +2282,11 @@
         buildFrameVisCard();
         buildJointConfig();
         buildLinkConfig();
+        buildOffsetConfig();
         buildVelocityConfig();
         attachJointListeners();
         attachLinkListeners();
+        attachOffsetListeners();
 
         // Restore previously set values
         for (let j = 1; j <= numDOF; j++) {
@@ -2253,6 +2304,15 @@
               nEl = document.getElementById("nl" + (i + 1));
             if (s && nEl) {
               s.value = nEl.value = savedLens[i].toFixed(2);
+            }
+          }
+        }
+        for (let j = 1; j <= numDOF; j++) {
+          if (savedOffsets[j] !== undefined) {
+            const s = document.getElementById("so" + j),
+              nEl = document.getElementById("no" + j);
+            if (s && nEl) {
+              s.value = nEl.value = savedOffsets[j].toFixed(2);
             }
           }
         }
@@ -2342,7 +2402,6 @@
         const N = numDOF;
         const FEE = frames[N];
         const pEE = pos[N];
-        const W = I4();
 
         const pd = getIkPos();
         const ep = [pd[0] - pEE[0], pd[1] - pEE[1], pd[2] - pEE[2]];
@@ -2366,8 +2425,7 @@
           jws = [];
         for (let i = 0; i < N; i++) {
           const j = i + 1;
-          const prevFrame = i === 0 ? W : frames[i - 1];
-          const z = getAxisCol(axes[j], prevFrame);
+          const z = colZ(frames[i]);
           const pj = pos[i];
           jvs.push(types[j] === "r" ? cross(z, [pEE[0] - pj[0], pEE[1] - pj[1], pEE[2] - pj[2]]) : [z[0], z[1], z[2]]);
           jws.push(types[j] === "r" ? z : [0, 0, 0]);
