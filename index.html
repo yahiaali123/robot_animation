@@ -1,806 +1,2088 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title id="docTitle">3-DOF Robot — Forward Kinematics</title>
-<style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title id="docTitle">3-DOF Robot — Forward Kinematics</title>
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
 
-  body {
-    background: #0f0f1a;
-    color: #e0e0f0;
-    font-family: 'Segoe UI', sans-serif;
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
+      /* ── Theme tokens ───────────────────────────────────────────────────────── */
+      :root {
+        --mwrap-bg: #0a0a14;
+        --mwrap-border: #222240;
+        --mlbl-color: #5a5a88;
+        --mci-border: #2a2a50;
+        --mc-rx: #e07070;
+        --mc-gy: #70d070;
+        --mc-bz: #7090f0;
+        --mc-tr: #e8cc70;
+      }
+      body.light {
+        --mwrap-bg: #f4f4ff;
+        --mwrap-border: #d0d0ec;
+        --mlbl-color: #8888b0;
+        --mci-border: #c0c0e0;
+        --mc-rx: #cc2222;
+        --mc-gy: #228822;
+        --mc-bz: #2244cc;
+        --mc-tr: #997722;
+      }
 
-  header {
-    background: #1a1a2e;
-    border-bottom: 1px solid #2a2a4a;
-    padding: 11px 22px;
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    flex-shrink: 0;
-  }
-  header h1 { font-size: 1.05rem; font-weight: 600; color: #a0a0ff; letter-spacing: .04em; }
-  .hint { font-size: .75rem; color: #44447a; font-style: italic; }
+      body {
+        background: #0f0f1a;
+        color: #e0e0f0;
+        font-family: "Segoe UI", sans-serif;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
 
-  main { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+      header {
+        background: #1a1a2e;
+        border-bottom: 1px solid #2a2a4a;
+        padding: 11px 22px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        flex-shrink: 0;
+      }
+      header h1 {
+        font-size: 1.05rem;
+        font-weight: 600;
+        color: #a0a0ff;
+        letter-spacing: 0.04em;
+      }
+      .hint {
+        font-size: 0.75rem;
+        color: #44447a;
+        font-style: italic;
+      }
 
-  .canvas-panel {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: #09090f;
-    position: relative;
-  }
-  #rc { display: block; cursor: grab; }
-  #rc:active { cursor: grabbing; }
+      main {
+        display: flex;
+        flex: 1;
+        min-height: 0;
+        overflow: hidden;
+      }
 
-  .side {
-    width: 310px;
-    flex-shrink: 0;
-    border-left: 1px solid #2a2a4a;
-    background: #111120;
-    display: flex;
-    flex-direction: column;
-    overflow-y: auto;
-  }
+      .canvas-panel {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #09090f;
+        position: relative;
+      }
+      #rc {
+        display: block;
+        cursor: grab;
+      }
+      #rc:active {
+        cursor: grabbing;
+      }
 
-  .card { border-bottom: 1px solid #1e1e36; padding: 13px 15px; }
+      .side {
+        width: 310px;
+        flex-shrink: 0;
+        border-left: 1px solid #2a2a4a;
+        background: #111120;
+        display: flex;
+        flex-direction: column;
+        overflow-y: auto;
+      }
 
-  .card-title {
-    font-size: .7rem;
-    font-weight: 700;
-    letter-spacing: .09em;
-    text-transform: uppercase;
-    color: #6060a0;
-    margin-bottom: 11px;
-  }
+      .card {
+        border-bottom: 1px solid #1e1e36;
+        padding: 13px 15px;
+      }
 
-  /* DOF stepper */
-  .dof-row { display: flex; align-items: center; gap: 10px; }
-  .dof-btn {
-    width: 28px; height: 28px;
-    font-size: 1.1rem; font-weight: 700; line-height: 1;
-    border: 1px solid #303060;
-    border-radius: 6px;
-    background: #15152a;
-    color: #8080c0;
-    cursor: pointer;
-    transition: background .12s, color .12s, border-color .12s;
-    user-select: none;
-    display: flex; align-items: center; justify-content: center;
-  }
-  .dof-btn:hover:not(:disabled) { background: #1e1e3a; color: #b0b0ff; border-color: #5050aa; }
-  .dof-btn:disabled { opacity: .35; cursor: default; }
-  .dof-val {
-    min-width: 32px;
-    text-align: center;
-    font-size: 1.4rem;
-    font-weight: 700;
-    color: #a0a0ff;
-    font-family: 'Consolas', monospace;
-  }
-  .dof-hint { font-size: .7rem; color: #3a3a6a; }
+      .card-title {
+        font-size: 0.7rem;
+        font-weight: 700;
+        letter-spacing: 0.09em;
+        text-transform: uppercase;
+        color: #6060a0;
+        margin-bottom: 11px;
+      }
 
-  /* Joint inputs */
-  .jg { margin-bottom: 13px; }
-  .jg:last-child { margin-bottom: 0; }
+      /* DOF stepper */
+      .dof-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .dof-btn {
+        width: 28px;
+        height: 28px;
+        font-size: 1.1rem;
+        font-weight: 700;
+        line-height: 1;
+        border: 1px solid #303060;
+        border-radius: 6px;
+        background: #15152a;
+        color: #8080c0;
+        cursor: pointer;
+        transition:
+          background 0.12s,
+          color 0.12s,
+          border-color 0.12s;
+        user-select: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .dof-btn:hover:not(:disabled) {
+        background: #1e1e3a;
+        color: #b0b0ff;
+        border-color: #5050aa;
+      }
+      .dof-btn:disabled {
+        opacity: 0.35;
+        cursor: default;
+      }
+      .dof-val {
+        min-width: 32px;
+        text-align: center;
+        font-size: 1.4rem;
+        font-weight: 700;
+        color: #a0a0ff;
+        font-family: "Consolas", monospace;
+      }
+      .dof-hint {
+        font-size: 0.7rem;
+        color: #3a3a6a;
+      }
 
-  .jh {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 5px;
-  }
-  .jlabel { font-size: .82rem; font-weight: 600; color: #c0c0e0; }
+      /* Joint inputs */
+      .jg {
+        margin-bottom: 13px;
+      }
+      .jg:last-child {
+        margin-bottom: 0;
+      }
 
-  .badge { font-size: .65rem; padding: 2px 7px; border-radius: 10px; font-weight: 700; letter-spacing: .04em; }
-  .bz { background: #18184a; color: #8080ff; }
-  .by { background: #182818; color: #60cc60; }
+      .jh {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 5px;
+      }
+      .jlabel {
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: #c0c0e0;
+      }
 
-  .jcontrols { display: flex; align-items: center; gap: 8px; }
+      .badge {
+        font-size: 0.65rem;
+        padding: 2px 7px;
+        border-radius: 10px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+      }
+      .badge.bz {
+        background: #18184a;
+        color: #8080ff;
+      }
+      .badge.by {
+        background: #182818;
+        color: #60cc60;
+      }
 
-  .typsel { display: flex; gap: 3px; }
-  .typbtn {
-    padding: 2px 8px; font-size: .68rem; font-weight: 700; letter-spacing: .05em;
-    border: 1px solid #252545; border-radius: 5px; background: #12121e; color: #505080;
-    cursor: pointer; transition: background .12s, color .12s, border-color .12s; user-select: none;
-  }
-  .typbtn:hover { background: #1c1c36; color: #8080b0; }
-  .typbtn.typ-r.active { background: #1a1a3a; color: #a0a0ff; border-color: #5050aa; }
-  .typbtn.typ-p.active { background: #2a1a10; color: #ffaa60; border-color: #aa6030; }
+      .jcontrols {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
 
-  .axsel { display: flex; gap: 4px; }
-  .axbtn {
-    padding: 2px 9px; font-size: .68rem; font-weight: 700; letter-spacing: .05em;
-    border: 1px solid #252545; border-radius: 5px; background: #12121e; color: #505080;
-    cursor: pointer; transition: background .12s, color .12s, border-color .12s; user-select: none;
-  }
-  .axbtn:hover { background: #1c1c36; color: #8080b0; }
-  .axbtn.ax-x.active { background: #3a1515; color: #ff7070; border-color: #cc4444; }
-  .axbtn.ax-y.active { background: #153a15; color: #70dd70; border-color: #44aa44; }
-  .axbtn.ax-z.active { background: #15153a; color: #7090ff; border-color: #4454cc; }
+      .typsel {
+        display: flex;
+        gap: 3px;
+      }
+      .typbtn {
+        padding: 2px 8px;
+        font-size: 0.68rem;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        border: 1px solid #252545;
+        border-radius: 5px;
+        background: #12121e;
+        color: #505080;
+        cursor: pointer;
+        transition:
+          background 0.12s,
+          color 0.12s,
+          border-color 0.12s;
+        user-select: none;
+      }
+      .typbtn:hover {
+        background: #1c1c36;
+        color: #8080b0;
+      }
+      .typbtn.typ-r.active {
+        background: #1a1a3a;
+        color: #a0a0ff;
+        border-color: #5050aa;
+      }
+      .typbtn.typ-p.active {
+        background: #2a1a10;
+        color: #ffaa60;
+        border-color: #aa6030;
+      }
 
-  .jctrl { display: flex; align-items: center; gap: 7px; }
+      .axsel {
+        display: flex;
+        gap: 4px;
+      }
+      .axbtn {
+        padding: 2px 9px;
+        font-size: 0.68rem;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        border: 1px solid #252545;
+        border-radius: 5px;
+        background: #12121e;
+        color: #505080;
+        cursor: pointer;
+        transition:
+          background 0.12s,
+          color 0.12s,
+          border-color 0.12s;
+        user-select: none;
+      }
+      .axbtn:hover {
+        background: #1c1c36;
+        color: #8080b0;
+      }
+      .axbtn.ax-x.active {
+        background: #3a1515;
+        color: #ff7070;
+        border-color: #cc4444;
+      }
+      .axbtn.ax-y.active {
+        background: #153a15;
+        color: #70dd70;
+        border-color: #44aa44;
+      }
+      .axbtn.ax-z.active {
+        background: #15153a;
+        color: #7090ff;
+        border-color: #4454cc;
+      }
 
-  input[type="range"] { flex: 1; accent-color: #6060dd; cursor: pointer; }
-  input[type="number"] {
-    width: 58px; background: #0d0d1c; border: 1px solid #333358; border-radius: 5px;
-    color: #e0e0f0; padding: 4px 6px; font-size: .8rem; outline: none; text-align: center;
-    transition: border-color .2s;
-  }
-  input[type="number"]:focus { border-color: #5555cc; }
-  .deg { font-size: .74rem; color: #44447a; }
+      .jctrl {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+      }
 
-  .rgrid { display: grid; grid-template-columns: 28px 1fr; gap: 3px 10px; font-size: .78rem; }
-  .rk { color: #6060a0; font-weight: 700; }
-  .rv { font-family: 'Consolas', monospace; color: #b0cce0; }
+      input[type="range"] {
+        flex: 1;
+        accent-color: #6060dd;
+        cursor: pointer;
+      }
+      input[type="number"] {
+        width: 58px;
+        background: #0d0d1c;
+        border: 1px solid #333358;
+        border-radius: 5px;
+        color: #e0e0f0;
+        padding: 4px 6px;
+        font-size: 0.8rem;
+        outline: none;
+        text-align: center;
+        transition: border-color 0.2s;
+      }
+      input[type="number"]:focus {
+        border-color: #5555cc;
+      }
+      .deg {
+        font-size: 0.74rem;
+        color: #44447a;
+      }
 
-  .orow { display: flex; gap: 5px; }
-  .oitem { flex: 1; background: #0d0d1c; border: 1px solid #222240; border-radius: 5px; padding: 5px 4px; text-align: center; }
-  .olbl { display: block; font-size: .64rem; color: #55558a; margin-bottom: 2px; }
-  .oval { font-size: .78rem; font-family: 'Consolas', monospace; color: #b0d8f0; }
+      .rgrid {
+        display: grid;
+        grid-template-columns: 28px 1fr;
+        gap: 3px 10px;
+        font-size: 0.78rem;
+      }
+      .rk {
+        color: #6060a0;
+        font-weight: 700;
+      }
+      .rv {
+        font-family: "Consolas", monospace;
+        color: #b0cce0;
+      }
 
-  .mlbl { font-size: .67rem; font-family: 'Consolas', monospace; color: #5a5a88; margin: 10px 0 4px; }
-  .mlbl:first-child { margin-top: 2px; }
+      .orow {
+        display: flex;
+        gap: 5px;
+      }
+      .oitem {
+        flex: 1;
+        background: #0d0d1c;
+        border: 1px solid #222240;
+        border-radius: 5px;
+        padding: 5px 4px;
+        text-align: center;
+      }
+      .olbl {
+        display: block;
+        font-size: 0.64rem;
+        color: #55558a;
+        margin-bottom: 2px;
+      }
+      .oval {
+        font-size: 0.78rem;
+        font-family: "Consolas", monospace;
+        color: #b0d8f0;
+      }
 
-  .mwrap {
-    font-family: 'Consolas', monospace; font-size: .69rem;
-    background: #0a0a14; border: 1px solid #222240; border-radius: 5px;
-    padding: 9px 8px; line-height: 1.7;
-  }
-  .mrow { display: flex; }
-  .mc { width: 56px; text-align: right; padding-right: 6px; }
-  .mc.rx { color: #e07070; }
-  .mc.gy { color: #70d070; }
-  .mc.bz { color: #7090f0; }
-  .mc.tr { color: #e8cc70; }
+      .mlbl {
+        font-size: 0.67rem;
+        font-family: "Consolas", monospace;
+        color: var(--mlbl-color);
+        margin: 10px 0 4px;
+      }
+      .mlbl:first-child {
+        margin-top: 2px;
+      }
 
-  .jtable { width: 100%; border-collapse: collapse; font-size: .74rem; }
-  .jtable th { color: #55558a; font-weight: 600; text-align: left; padding: 2px 4px; border-bottom: 1px solid #1e1e36; }
-  .jtable td { font-family: 'Consolas', monospace; color: #90b0c8; padding: 3px 4px; }
-  .jtable tr:not(:last-child) td { border-bottom: 1px solid #191930; }
-  .jname { color: #8080cc !important; font-weight: 600; }
+      .mwrap {
+        font-family: "Consolas", monospace;
+        font-size: 0.69rem;
+        background: var(--mwrap-bg);
+        border: 1px solid var(--mwrap-border);
+        border-radius: 5px;
+        padding: 9px 8px;
+        line-height: 1.7;
+      }
+      .mrow {
+        display: flex;
+      }
+      .mc {
+        width: 56px;
+        text-align: right;
+        padding-right: 6px;
+      }
+      .mc.rx {
+        color: var(--mc-rx);
+      }
+      .mc.gy {
+        color: var(--mc-gy);
+      }
+      .mc.bz {
+        color: var(--mc-bz);
+      }
+      .mc.tr {
+        color: var(--mc-tr);
+      }
 
-  .viewbar {
-    position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
-    display: flex; gap: 5px;
-    background: rgba(8,8,18,0.9); border: 1px solid #252545; border-radius: 10px;
-    padding: 6px 8px; white-space: nowrap;
-  }
-  .vbtn {
-    padding: 5px 13px; font-size: .74rem; font-weight: 700; letter-spacing: .04em;
-    border: 1px solid #252545; border-radius: 6px; background: #12121e; color: #606090;
-    cursor: pointer; transition: background .15s, color .15s, border-color .15s; user-select: none;
-  }
-  .vbtn:hover  { background: #1c1c36; color: #9090c0; border-color: #383868; }
-  .vbtn.active { background: #252598; color: #c0c0ff; border-color: #5050cc; }
-  .vbtn.fit    { color: #508060; border-color: #1e3028; }
-  .vbtn.fit:hover { background: #162216; color: #70b088; border-color: #2a4838; }
-  .vbtn.ik-on  { background: #2a1030; color: #ff80cc; border-color: #aa4488; }
+      .jtable {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.74rem;
+      }
+      .jtable th {
+        color: #55558a;
+        font-weight: 600;
+        text-align: left;
+        padding: 2px 4px;
+        border-bottom: 1px solid #1e1e36;
+      }
+      .jtable td {
+        font-family: "Consolas", monospace;
+        color: #90b0c8;
+        padding: 3px 4px;
+      }
+      .jtable tr:not(:last-child) td {
+        border-bottom: 1px solid #191930;
+      }
+      .jname {
+        color: #8080cc !important;
+        font-weight: 600;
+      }
 
-  .mci {
-    background: transparent; border: none; border-bottom: 1px solid #2a2a50;
-    font-family: 'Consolas', monospace; font-size: .69rem; width: 56px;
-    text-align: right; padding: 1px 6px 1px 0; outline: none; transition: border-color .15s;
-  }
-  .mci:focus { border-bottom-color: #5555cc; }
-  .mci::-webkit-outer-spin-button, .mci::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-  .mci[type=number] { -moz-appearance: textfield; }
+      .viewbar {
+        position: absolute;
+        bottom: 14px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        gap: 5px;
+        background: rgba(8, 8, 18, 0.9);
+        border: 1px solid #252545;
+        border-radius: 10px;
+        padding: 6px 8px;
+        white-space: nowrap;
+      }
+      .vbtn {
+        padding: 5px 13px;
+        font-size: 0.74rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        border: 1px solid #252545;
+        border-radius: 6px;
+        background: #12121e;
+        color: #606090;
+        cursor: pointer;
+        transition:
+          background 0.15s,
+          color 0.15s,
+          border-color 0.15s;
+        user-select: none;
+      }
+      .vbtn:hover {
+        background: #1c1c36;
+        color: #9090c0;
+        border-color: #383868;
+      }
+      .vbtn.active {
+        background: #252598;
+        color: #c0c0ff;
+        border-color: #5050cc;
+      }
+      .vbtn.fit {
+        color: #508060;
+        border-color: #1e3028;
+      }
+      .vbtn.fit:hover {
+        background: #162216;
+        color: #70b088;
+        border-color: #2a4838;
+      }
+      .vbtn.ik-on {
+        background: #2a1030;
+        color: #ff80cc;
+        border-color: #aa4488;
+      }
+      .vbtn.leg-on {
+        background: #0e1a2a;
+        color: #60b0e8;
+        border-color: #2a5080;
+      }
 
-  .ik-actions { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
-  .ik-btn {
-    padding: 4px 10px; font-size: .7rem; font-weight: 700; letter-spacing: .04em;
-    border: 1px solid #303060; border-radius: 5px; background: #15152a; color: #8080c0;
-    cursor: pointer; transition: background .12s, color .12s, border-color .12s; user-select: none;
-  }
-  .ik-btn:hover { background: #1e1e38; color: #a0a0e0; border-color: #4040a0; }
+      .mci {
+        background: transparent;
+        border: none;
+        border-bottom: 1px solid var(--mci-border);
+        font-family: "Consolas", monospace;
+        font-size: 0.69rem;
+        width: 56px;
+        text-align: right;
+        padding: 1px 6px 1px 0;
+        outline: none;
+        transition: border-color 0.15s;
+      }
+      .mci:focus {
+        border-bottom-color: #5555cc;
+      }
+      .mci::-webkit-outer-spin-button,
+      .mci::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+      }
+      .mci[type="number"] {
+        -moz-appearance: textfield;
+      }
 
-  .cam-info {
-    position: absolute; top: 10px; left: 12px;
-    font-size: .67rem; font-family: 'Consolas', monospace;
-    color: #353568; pointer-events: none; line-height: 1.65;
-  }
+      .ik-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 10px;
+        flex-wrap: wrap;
+      }
+      .ik-btn {
+        padding: 4px 10px;
+        font-size: 0.7rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        border: 1px solid #303060;
+        border-radius: 5px;
+        background: #15152a;
+        color: #8080c0;
+        cursor: pointer;
+        transition:
+          background 0.12s,
+          color 0.12s,
+          border-color 0.12s;
+        user-select: none;
+      }
+      .ik-btn:hover {
+        background: #1e1e38;
+        color: #a0a0e0;
+        border-color: #4040a0;
+      }
 
-  @media (max-width: 720px) {
-    body { height: auto; overflow-y: auto; }
-    main { flex-direction: column; height: auto; overflow: visible; }
-    .canvas-panel { flex: none; width: 100%; height: 58vw; min-height: 260px; max-height: 52vh; }
-    .side { width: 100%; border-left: none; border-top: 1px solid #2a2a4a; overflow-y: visible; flex-shrink: 0; }
-    .hint { display: none; }
-    .viewbar { flex-wrap: wrap; gap: 4px; padding: 5px 7px; bottom: 8px; }
-    .vbtn { padding: 5px 10px; font-size: .7rem; }
-    input[type="range"] { height: 34px; }
-    input[type="number"] { width: 64px; padding: 7px 5px; font-size: .88rem; }
-    .mc { width: 46px; }
-    .mwrap { font-size: .6rem; }
-    .mci { width: 46px; font-size: .6rem; }
-    header { padding: 9px 14px; gap: 10px; }
-    header h1 { font-size: .92rem; }
-  }
-</style>
-</head>
-<body>
+      .cam-info {
+        position: absolute;
+        top: 10px;
+        left: 12px;
+        font-size: 0.67rem;
+        font-family: "Consolas", monospace;
+        color: #353568;
+        pointer-events: none;
+        line-height: 1.65;
+      }
 
-<header>
-  <h1 id="pageTitle">3-DOF Robot — Forward Kinematics</h1>
-  <span class="hint">Left-drag to orbit &nbsp;·&nbsp; Middle-drag to pan &nbsp;·&nbsp; Scroll / pinch to zoom</span>
-</header>
+      /* ── Velocity Kinematics ───────────────────────────────────────────────── */
+      .vel-out-row {
+        display: flex;
+        gap: 5px;
+        margin-bottom: 7px;
+      }
+      .vel-out-row:last-child {
+        margin-bottom: 0;
+      }
+      .vel-out-section {
+        font-size: 0.62rem;
+        font-weight: 700;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+        color: #4a4a7a;
+        margin-bottom: 5px;
+      }
+      .vel-out-item {
+        flex: 1;
+        background: #0d0d1c;
+        border: 1px solid #222240;
+        border-radius: 5px;
+        padding: 5px 4px;
+        text-align: center;
+      }
+      .vel-out-lbl {
+        display: block;
+        font-size: 0.62rem;
+        color: #55558a;
+        margin-bottom: 2px;
+      }
+      .vel-out-val {
+        font-size: 0.76rem;
+        font-family: "Consolas", monospace;
+      }
+      .vel-lin {
+        color: #ffcc55;
+      }
+      .vel-ang {
+        color: #cc99ff;
+      }
 
-<main>
-  <div class="canvas-panel">
-    <canvas id="rc"></canvas>
-    <div class="cam-info" id="camInfo"></div>
-    <div class="viewbar">
-      <button class="vbtn" id="vIso"  >Iso</button>
-      <button class="vbtn" id="vTop"  >Top · XY</button>
-      <button class="vbtn" id="vFront">Front · XZ</button>
-      <button class="vbtn" id="vSide" >Side · YZ</button>
-      <button class="vbtn" id="vIK">IK</button>
-      <button class="vbtn fit" id="vFit">Fit Zoom</button>
-    </div>
-  </div>
+      /* ── Jacobian ───────────────────────────────────────────────────────────── */
+      .jac-wrap {
+        overflow-x: auto;
+        font-family: "Consolas", monospace;
+        font-size: 0.62rem;
+        background: #0a0a14;
+        border: 1px solid #222240;
+        border-radius: 5px;
+        padding: 8px 7px;
+        line-height: 1.75;
+      }
+      .jac-tbl {
+        border-collapse: collapse;
+        white-space: nowrap;
+      }
+      .jac-ch {
+        font-size: 0.58rem;
+        color: #5a5a90;
+        text-align: center;
+        padding: 0 4px 5px;
+        border-bottom: 1px solid #1e1e36;
+      }
+      .jac-rl {
+        font-size: 0.6rem;
+        color: #5a5a90;
+        padding-right: 10px;
+        text-align: right;
+      }
+      .jac-sep td {
+        height: 5px;
+        border-bottom: 1px solid #1a1a32;
+      }
+      .jac-v {
+        color: #b0d8f0;
+        text-align: right;
+        padding: 1px 5px;
+        min-width: 50px;
+      }
+      .jac-w {
+        color: #c8a0f0;
+        text-align: right;
+        padding: 1px 5px;
+        min-width: 50px;
+      }
 
-  <div class="side">
+      /* ── Frame Visibility ──────────────────────────────────────────────────── */
+      .fv-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+      }
+      .fvbtn {
+        padding: 4px 9px;
+        font-size: 0.68rem;
+        font-weight: 700;
+        border: 1px solid #222240;
+        border-radius: 5px;
+        background: #0e0e1c;
+        color: #44446a;
+        cursor: pointer;
+        transition:
+          background 0.13s,
+          color 0.13s,
+          border-color 0.13s;
+        user-select: none;
+      }
+      .fvbtn:hover {
+        background: #181830;
+        color: #8080b8;
+        border-color: #38387a;
+      }
+      .fvbtn.fv-on {
+        background: #101828;
+        color: #5cb4e8;
+        border-color: #2a5488;
+      }
+      .fvbtn.fv-on:hover {
+        background: #152030;
+        color: #80ccf0;
+        border-color: #3a70b0;
+      }
+      .fvbtn.fv-world {
+        color: #707090;
+      }
+      .fvbtn.fv-world.fv-on {
+        color: #90a0d0;
+        border-color: #384070;
+        background: #10121e;
+      }
+      .fvbtn.fv-ee {
+      }
+      .fvbtn.fv-ee.fv-on {
+        color: #e8c040;
+        border-color: #805820;
+        background: #1a1408;
+      }
 
-    <div class="card">
-      <div class="card-title">Degrees of Freedom</div>
-      <div class="dof-row">
-        <button class="dof-btn" id="dofDec">−</button>
-        <span class="dof-val" id="dofVal">3</span>
-        <button class="dof-btn" id="dofInc">+</button>
-        <span class="dof-hint">joints (1–8)</span>
-      </div>
-    </div>
+      /* ── Canvas Legend ─────────────────────────────────────────────────────── */
+      .legend {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        background: rgba(8, 8, 20, 0.82);
+        border: 1px solid #2a2a50;
+        border-radius: 8px;
+        padding: 9px 11px 8px;
+        pointer-events: none;
+        font-size: 0.65rem;
+        color: #b0b0d8;
+        line-height: 1;
+        min-width: 150px;
+        backdrop-filter: blur(4px);
+        z-index: 10;
+      }
+      .legend-title {
+        font-size: 0.6rem;
+        font-weight: 700;
+        letter-spacing: 0.09em;
+        text-transform: uppercase;
+        color: #6666aa;
+        margin-bottom: 7px;
+      }
+      .legend-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 5px;
+      }
+      .legend-row:last-child {
+        margin-bottom: 0;
+      }
+      .legend-sep {
+        height: 1px;
+        background: #1e1e3a;
+        margin: 5px 0;
+      }
+      /* dot swatch */
+      .ls-dot {
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        border: 1.5px solid;
+      }
+      /* gradient line swatch */
+      .ls-line {
+        width: 26px;
+        height: 4px;
+        border-radius: 2px;
+        flex-shrink: 0;
+        background: linear-gradient(to right, #5050c8, #38b8ee);
+      }
+      /* tricolor axis strip */
+      .ls-axes {
+        display: flex;
+        gap: 2px;
+        align-items: center;
+        flex-shrink: 0;
+      }
+      .ls-axline {
+        width: 8px;
+        height: 3px;
+        border-radius: 1px;
+      }
+      /* ring swatch */
+      .ls-ring {
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        border: 2px solid rgba(160, 160, 255, 0.75);
+        background: transparent;
+      }
+      /* arrow swatch */
+      .ls-arrow {
+        font-size: 0.75rem;
+        flex-shrink: 0;
+        width: 14px;
+        text-align: center;
+      }
+      /* IK target row dims when not in IK mode */
+      .legend-ik {
+        opacity: 0.55;
+      }
 
-    <div class="card">
-      <div class="card-title">Joint Configuration</div>
-      <div id="jointConfigContainer"></div>
-    </div>
+      /* ── Theme toggle button ────────────────────────────────────────────────── */
+      .theme-btn {
+        margin-left: auto;
+        flex-shrink: 0;
+        padding: 5px 12px;
+        font-size: 0.74rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        border: 1px solid #303060;
+        border-radius: 6px;
+        background: #15152a;
+        color: #8080c0;
+        cursor: pointer;
+        transition:
+          background 0.15s,
+          color 0.15s,
+          border-color 0.15s;
+        user-select: none;
+      }
+      .theme-btn:hover {
+        background: #1e1e3a;
+        color: #b0b0ff;
+        border-color: #5050aa;
+      }
 
-    <div class="card">
-      <div class="card-title">Link Lengths</div>
-      <div id="linkConfigContainer"></div>
-    </div>
+      /* ── Light mode overrides ───────────────────────────────────────────────── */
+      body.light {
+        background: #f4f4fc;
+        color: #1a1a3a;
+      }
+      body.light header {
+        background: #ffffff;
+        border-bottom-color: #d8d8ec;
+      }
+      body.light header h1 {
+        color: #4040b0;
+      }
+      body.light .hint {
+        color: #9090b8;
+      }
+      body.light .theme-btn {
+        background: #eaeaf6;
+        color: #5858b0;
+        border-color: #c0c0e0;
+      }
+      body.light .theme-btn:hover {
+        background: #dcdcf0;
+        color: #3838a0;
+        border-color: #8888cc;
+      }
+      body.light .canvas-panel {
+        background: #e8e8f4;
+      }
+      body.light .side {
+        background: #fafafe;
+        border-left-color: #d8d8ec;
+      }
+      body.light .card {
+        border-bottom-color: #e4e4f4;
+      }
+      body.light .card-title {
+        color: #7070b0;
+      }
+      body.light .dof-btn {
+        background: #eaeaf6;
+        color: #6060b0;
+        border-color: #c0c0e0;
+      }
+      body.light .dof-btn:hover:not(:disabled) {
+        background: #dcdcf0;
+        color: #4040a0;
+        border-color: #8080cc;
+      }
+      body.light .dof-val {
+        color: #4040b0;
+      }
+      body.light .dof-hint {
+        color: #9090b8;
+      }
+      body.light .jlabel {
+        color: #2a2a50;
+      }
+      body.light .badge.bz {
+        background: #e0e0ff;
+        color: #4444bb;
+      }
+      body.light .badge.by {
+        background: #d8f0d8;
+        color: #228822;
+      }
+      body.light .typbtn {
+        background: #f0f0f8;
+        color: #7070a0;
+        border-color: #d0d0ec;
+      }
+      body.light .typbtn:hover {
+        background: #e4e4f4;
+        color: #4040a0;
+      }
+      body.light .typbtn.typ-r.active {
+        background: #e8e8ff;
+        color: #3838b8;
+        border-color: #5050b8;
+      }
+      body.light .typbtn.typ-p.active {
+        background: #fff0e0;
+        color: #cc6600;
+        border-color: #cc8040;
+      }
+      body.light .axbtn {
+        background: #f0f0f8;
+        color: #7070a0;
+        border-color: #d0d0ec;
+      }
+      body.light .axbtn:hover {
+        background: #e4e4f4;
+        color: #4040a0;
+      }
+      body.light .axbtn.ax-x.active {
+        background: #ffe8e8;
+        color: #cc3333;
+        border-color: #cc4444;
+      }
+      body.light .axbtn.ax-y.active {
+        background: #e8ffe8;
+        color: #228822;
+        border-color: #44aa44;
+      }
+      body.light .axbtn.ax-z.active {
+        background: #e8e8ff;
+        color: #3344cc;
+        border-color: #4454cc;
+      }
+      body.light input[type="number"] {
+        background: #ffffff;
+        border-color: #c0c0e0;
+        color: #1a1a3a;
+      }
+      body.light .deg {
+        color: #9090b8;
+      }
+      body.light .rk {
+        color: #6060a0;
+      }
+      body.light .rv {
+        color: #224488;
+      }
+      body.light .oitem {
+        background: #f0f0f8;
+        border-color: #d0d0ec;
+      }
+      body.light .olbl {
+        color: #8080b0;
+      }
+      body.light .oval {
+        color: #224488;
+      }
+      body.light .jtable th {
+        color: #8080b0;
+        border-bottom-color: #d8d8f0;
+      }
+      body.light .jtable td {
+        color: #224466;
+      }
+      body.light .jtable tr:not(:last-child) td {
+        border-bottom-color: #e8e8f8;
+      }
+      body.light .jname {
+        color: #4040a0 !important;
+      }
+      body.light .viewbar {
+        background: rgba(255, 255, 255, 0.92);
+        border-color: #d0d0e8;
+      }
+      body.light .vbtn {
+        background: #f0f0f8;
+        color: #6060a0;
+        border-color: #d0d0ec;
+      }
+      body.light .vbtn:hover {
+        background: #e0e0f0;
+        color: #4040b0;
+        border-color: #a0a0d0;
+      }
+      body.light .vbtn.active {
+        background: #d0d0f8;
+        color: #3030b0;
+        border-color: #6060cc;
+      }
+      body.light .vbtn.fit {
+        color: #406050;
+        border-color: #b0d0c0;
+      }
+      body.light .vbtn.fit:hover {
+        background: #d8f0e0;
+        color: #306040;
+        border-color: #80c0a0;
+      }
+      body.light .vbtn.ik-on {
+        background: #f8e0f0;
+        color: #cc2288;
+        border-color: #dd88bb;
+      }
+      body.light .vbtn.leg-on {
+        background: #e0f0f8;
+        color: #2275b0;
+        border-color: #80c0e0;
+      }
+      body.light .mci {
+        background: transparent;
+        color: inherit;
+      }
+      body.light .mci:focus {
+        border-bottom-color: #5555cc;
+      }
+      body.light .ik-btn {
+        background: #eaeaf6;
+        color: #5858b0;
+        border-color: #c0c0e0;
+      }
+      body.light .ik-btn:hover {
+        background: #d8d8f0;
+        color: #3838a0;
+        border-color: #8080c0;
+      }
+      body.light .cam-info {
+        color: #a0a0c0;
+      }
+      body.light .vel-out-section {
+        color: #7070a0;
+      }
+      body.light .vel-out-item {
+        background: #f0f0f8;
+        border-color: #d0d0ec;
+      }
+      body.light .vel-out-lbl {
+        color: #8080b0;
+      }
+      body.light .jac-wrap {
+        background: #f4f4ff;
+        border-color: #d0d0ec;
+      }
+      body.light .jac-ch {
+        color: #8080b0;
+        border-bottom-color: #d8d8f0;
+      }
+      body.light .jac-rl {
+        color: #8080b0;
+      }
+      body.light .jac-sep td {
+        border-bottom-color: #e0e0f0;
+      }
+      body.light .jac-v {
+        color: #2255aa;
+      }
+      body.light .jac-w {
+        color: #7030b0;
+      }
+      body.light .fvbtn {
+        background: #f0f0fc;
+        color: #8888b0;
+        border-color: #d0d0ec;
+      }
+      body.light .fvbtn:hover {
+        background: #e4e4f4;
+        color: #5050a0;
+        border-color: #a0a0d0;
+      }
+      body.light .fvbtn.fv-on {
+        background: #dde8f8;
+        color: #2255c0;
+        border-color: #7090d0;
+      }
+      body.light .fvbtn.fv-on:hover {
+        background: #ccd8f4;
+        color: #1a44b0;
+        border-color: #5070c0;
+      }
+      body.light .fvbtn.fv-world.fv-on {
+        color: #4050a0;
+        border-color: #7080c0;
+        background: #e8e8f8;
+      }
+      body.light .fvbtn.fv-ee.fv-on {
+        color: #886600;
+        border-color: #c09040;
+        background: #f8f0d8;
+      }
+      body.light .legend {
+        background: rgba(255, 255, 255, 0.92);
+        border-color: #c0c0e0;
+        color: #404070;
+      }
+      body.light .legend-title {
+        color: #8080b0;
+      }
+      body.light .legend-sep {
+        background: #d8d8f0;
+      }
+      body.light .side {
+        border-top-color: #d8d8ec;
+      }
 
-    <div class="card">
-      <div class="card-title">End-Effector Position</div>
-      <div class="rgrid">
-        <span class="rk">x</span><span class="rv" id="ex">—</span>
-        <span class="rk">y</span><span class="rv" id="ey">—</span>
-        <span class="rk">z</span><span class="rv" id="ez">—</span>
-      </div>
-    </div>
+      @media (max-width: 720px) {
+        body {
+          height: auto;
+          overflow-y: auto;
+        }
+        main {
+          flex-direction: column;
+          height: auto;
+          overflow: visible;
+        }
+        .canvas-panel {
+          flex: none;
+          width: 100%;
+          height: 58vw;
+          min-height: 260px;
+          max-height: 52vh;
+        }
+        .side {
+          width: 100%;
+          border-left: none;
+          border-top: 1px solid #2a2a4a;
+          overflow-y: visible;
+          flex-shrink: 0;
+        }
+        .hint {
+          display: none;
+        }
+        .viewbar {
+          flex-wrap: wrap;
+          gap: 4px;
+          padding: 5px 7px;
+          bottom: 8px;
+        }
+        .vbtn {
+          padding: 5px 10px;
+          font-size: 0.7rem;
+        }
+        input[type="range"] {
+          height: 34px;
+        }
+        input[type="number"] {
+          width: 64px;
+          padding: 7px 5px;
+          font-size: 0.88rem;
+        }
+        .mc {
+          width: 46px;
+        }
+        .mwrap {
+          font-size: 0.6rem;
+        }
+        .mci {
+          width: 46px;
+          font-size: 0.6rem;
+        }
+        header {
+          padding: 9px 14px;
+          gap: 10px;
+        }
+        header h1 {
+          font-size: 0.92rem;
+        }
+      }
+    </style>
+  </head>
+  <body class="light">
+    <header>
+      <h1 id="pageTitle">3-DOF Robot — Forward Kinematics</h1>
+      <span class="hint">Left-drag to orbit &nbsp;·&nbsp; Middle-drag to pan &nbsp;·&nbsp; Scroll / pinch to zoom</span>
+      <button class="theme-btn" id="themeToggle">☀ Light</button>
+    </header>
 
-    <div class="card">
-      <div class="card-title">End-Effector Orientation (RPY)</div>
-      <div class="orow">
-        <div class="oitem"><span class="olbl">Roll</span><span class="oval" id="er">—</span></div>
-        <div class="oitem"><span class="olbl">Pitch</span><span class="oval" id="ep">—</span></div>
-        <div class="oitem"><span class="olbl">Yaw</span><span class="oval" id="ey2">—</span></div>
-      </div>
-    </div>
+    <main>
+      <div class="canvas-panel">
+        <canvas id="rc"></canvas>
+        <div class="cam-info" id="camInfo"></div>
 
-    <div class="card">
-      <div class="card-title">Joint Positions (world)</div>
-      <table class="jtable">
-        <thead><tr><th>Joint</th><th>x</th><th>y</th><th>z</th></tr></thead>
-        <tbody id="jtbody"></tbody>
-      </table>
-    </div>
+        <!-- Color-coding legend (top-right overlay, hidden by default) -->
+        <div class="legend" id="canvasLegend" style="display: none">
+          <div class="legend-title">Legend</div>
 
-    <div class="card">
-      <div class="card-title">Transform Matrix T₀ → EE</div>
-      <div class="mwrap" id="mtx"></div>
-    </div>
+          <!-- Joints -->
+          <div class="legend-row">
+            <div class="ls-dot" style="background: #5858ee; border-color: #9090ff"></div>
+            <span>Joint (J₁ — blue-purple)</span>
+          </div>
+          <div class="legend-row">
+            <div class="ls-dot" style="background: #38b8ee; border-color: #80ddff"></div>
+            <span>Joint (Jₙ — cyan)</span>
+          </div>
 
-    <div class="card">
-      <div class="card-title">Relative Transforms</div>
-      <div id="relMtx"></div>
-    </div>
+          <!-- EE -->
+          <div class="legend-row">
+            <div class="ls-dot" style="background: #ffdd44; border-color: #ffaa00"></div>
+            <span>End-effector</span>
+          </div>
 
-    <div class="card" id="ikMatCard" style="display:none">
-      <div class="card-title">IK Target Transform</div>
-      <div class="mwrap" id="ikMtx">
-        <div class="mrow">
-          <input class="mc mci rx" id="im00" type="number" value="1.0000" step="0.0001">
-          <input class="mc mci gy" id="im01" type="number" value="0.0000" step="0.0001">
-          <input class="mc mci bz" id="im02" type="number" value="0.0000" step="0.0001">
-          <input class="mc mci tr" id="im03" type="number" value="0.0000" step="0.0001">
+          <div class="legend-sep"></div>
+
+          <!-- Links -->
+          <div class="legend-row">
+            <div class="ls-line"></div>
+            <span>Links (blue → cyan)</span>
+          </div>
+
+          <div class="legend-sep"></div>
+
+          <!-- Frame axes -->
+          <div class="legend-row">
+            <div class="ls-axes">
+              <div class="ls-axline" style="background: #ff4444"></div>
+              <div class="ls-axline" style="background: #44cc44"></div>
+              <div class="ls-axline" style="background: #4466ff"></div>
+            </div>
+            <span
+              ><span style="color: #ff6666">X</span> · <span style="color: #44cc44">Y</span> ·
+              <span style="color: #6688ff">Z</span> frame axes</span
+            >
+          </div>
+
+          <div class="legend-sep"></div>
+
+          <!-- Joint types -->
+          <div class="legend-row">
+            <div class="ls-ring" style="border-color: rgba(160, 160, 255, 0.75)"></div>
+            <span>Revolute joint</span>
+          </div>
+          <div class="legend-row">
+            <div class="ls-arrow" style="color: #88aaff">↕</div>
+            <span>Prismatic joint</span>
+          </div>
+
+          <div class="legend-sep"></div>
+
+          <!-- Velocity arrows -->
+          <div class="legend-row">
+            <div class="ls-arrow" style="color: #ffcc44">→</div>
+            <span style="color: #ffcc44">v</span><span> — linear velocity</span>
+          </div>
+          <div class="legend-row">
+            <div class="ls-arrow" style="color: #cc88ff">→</div>
+            <span style="color: #cc88ff">ω</span><span> — angular velocity</span>
+          </div>
+
+          <div class="legend-sep"></div>
+
+          <!-- IK target -->
+          <div class="legend-row legend-ik" id="legendIKRow">
+            <div class="ls-dot" style="background: #ff44aa; border-color: #ff88dd"></div>
+            <span>IK target (IK mode)</span>
+          </div>
         </div>
-        <div class="mrow">
-          <input class="mc mci rx" id="im10" type="number" value="0.0000" step="0.0001">
-          <input class="mc mci gy" id="im11" type="number" value="1.0000" step="0.0001">
-          <input class="mc mci bz" id="im12" type="number" value="0.0000" step="0.0001">
-          <input class="mc mci tr" id="im13" type="number" value="0.0000" step="0.0001">
-        </div>
-        <div class="mrow">
-          <input class="mc mci rx" id="im20" type="number" value="0.0000" step="0.0001">
-          <input class="mc mci gy" id="im21" type="number" value="0.0000" step="0.0001">
-          <input class="mc mci bz" id="im22" type="number" value="1.0000" step="0.0001">
-          <input class="mc mci tr" id="im23" type="number" value="0.0000" step="0.0001">
-        </div>
-        <div class="mrow">
-          <span class="mc rx"> 0.0000</span>
-          <span class="mc gy"> 0.0000</span>
-          <span class="mc bz"> 0.0000</span>
-          <span class="mc tr"> 1.0000</span>
+
+        <div class="viewbar">
+          <button class="vbtn" id="vIso">Iso</button>
+          <button class="vbtn" id="vTop">Top · XY</button>
+          <button class="vbtn" id="vFront">Front · XZ</button>
+          <button class="vbtn" id="vSide">Side · YZ</button>
+          <button class="vbtn" id="vIK">IK</button>
+          <button class="vbtn fit" id="vFit">Fit Zoom</button>
+          <button class="vbtn" id="vLegend">Legend</button>
         </div>
       </div>
-      <div class="ik-actions">
-        <button class="ik-btn" id="ikGetEE">Get EE</button>
-        <button class="ik-btn" id="ikNormR">Norm R</button>
-        <label style="font-size:.72rem;color:#6060a0;cursor:pointer;display:flex;align-items:center;gap:5px">
-          <input type="checkbox" id="ikFullPose" style="accent-color:#aa44cc">Full pose
-        </label>
+
+      <div class="side">
+        <div class="card">
+          <div class="card-title">Degrees of Freedom</div>
+          <div class="dof-row">
+            <button class="dof-btn" id="dofDec">−</button>
+            <span class="dof-val" id="dofVal">3</span>
+            <button class="dof-btn" id="dofInc">+</button>
+            <span class="dof-hint">joints (1–8)</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Frame Visibility</div>
+          <div id="frameVisContainer"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Joint Configuration</div>
+          <div id="jointConfigContainer"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Link Lengths</div>
+          <div id="linkConfigContainer"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Joint Velocities</div>
+          <div id="velConfigContainer"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">End-Effector Position</div>
+          <div class="rgrid">
+            <span class="rk">x</span><span class="rv" id="ex">—</span> <span class="rk">y</span
+            ><span class="rv" id="ey">—</span> <span class="rk">z</span><span class="rv" id="ez">—</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">End-Effector Orientation (RPY)</div>
+          <div class="orow">
+            <div class="oitem"><span class="olbl">Roll</span><span class="oval" id="er">—</span></div>
+            <div class="oitem"><span class="olbl">Pitch</span><span class="oval" id="ep">—</span></div>
+            <div class="oitem"><span class="olbl">Yaw</span><span class="oval" id="ey2">—</span></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Joint Positions (world)</div>
+          <table class="jtable">
+            <thead>
+              <tr>
+                <th>Joint</th>
+                <th>x</th>
+                <th>y</th>
+                <th>z</th>
+              </tr>
+            </thead>
+            <tbody id="jtbody"></tbody>
+          </table>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Transform Matrix T₀ → EE</div>
+          <div class="mwrap" id="mtx"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Relative Transforms</div>
+          <div id="relMtx"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">EE Velocity</div>
+          <div class="vel-out-section">Linear &nbsp; m/s</div>
+          <div class="vel-out-row">
+            <div class="vel-out-item">
+              <span class="vel-out-lbl">vx</span><span class="vel-out-val vel-lin" id="ee_vx">—</span>
+            </div>
+            <div class="vel-out-item">
+              <span class="vel-out-lbl">vy</span><span class="vel-out-val vel-lin" id="ee_vy">—</span>
+            </div>
+            <div class="vel-out-item">
+              <span class="vel-out-lbl">vz</span><span class="vel-out-val vel-lin" id="ee_vz">—</span>
+            </div>
+          </div>
+          <div class="vel-out-section">Angular &nbsp; rad/s</div>
+          <div class="vel-out-row">
+            <div class="vel-out-item">
+              <span class="vel-out-lbl">ωx</span><span class="vel-out-val vel-ang" id="ee_wx">—</span>
+            </div>
+            <div class="vel-out-item">
+              <span class="vel-out-lbl">ωy</span><span class="vel-out-val vel-ang" id="ee_wy">—</span>
+            </div>
+            <div class="vel-out-item">
+              <span class="vel-out-lbl">ωz</span><span class="vel-out-val vel-ang" id="ee_wz">—</span>
+            </div>
+          </div>
+          <div style="margin-top: 8px">
+            <span class="vel-out-section">Speed</span>
+            <span
+              style="font-size: 0.76rem; font-family: &quot;Consolas&quot;, monospace; color: #ffcc55; margin-left: 6px"
+              id="ee_vmag"
+              >—</span
+            >
+            <span style="font-size: 0.62rem; color: #44447a; margin-left: 3px">m/s</span>
+            <span
+              style="
+                margin-left: 10px;
+                font-size: 0.76rem;
+                font-family: &quot;Consolas&quot;, monospace;
+                color: #cc99ff;
+              "
+              id="ee_wmag"
+              >—</span
+            >
+            <span style="font-size: 0.62rem; color: #44447a; margin-left: 3px">rad/s</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">
+            Jacobian Matrix &nbsp;<span
+              style="font-weight: 400; color: #3a3a60; font-size: 0.65rem; text-transform: none; letter-spacing: 0"
+              >(6 × N)</span
+            >
+          </div>
+          <div id="jacContainer">
+            <div class="jac-wrap"><em style="color: #3a3a60; font-size: 0.7rem">—</em></div>
+          </div>
+        </div>
+
+        <div class="card" id="ikMatCard" style="display: none">
+          <div class="card-title">IK Target Transform</div>
+          <div class="mwrap" id="ikMtx">
+            <div class="mrow">
+              <input class="mc mci rx" id="im00" type="number" value="1.0000" step="0.0001" />
+              <input class="mc mci gy" id="im01" type="number" value="0.0000" step="0.0001" />
+              <input class="mc mci bz" id="im02" type="number" value="0.0000" step="0.0001" />
+              <input class="mc mci tr" id="im03" type="number" value="0.0000" step="0.0001" />
+            </div>
+            <div class="mrow">
+              <input class="mc mci rx" id="im10" type="number" value="0.0000" step="0.0001" />
+              <input class="mc mci gy" id="im11" type="number" value="1.0000" step="0.0001" />
+              <input class="mc mci bz" id="im12" type="number" value="0.0000" step="0.0001" />
+              <input class="mc mci tr" id="im13" type="number" value="0.0000" step="0.0001" />
+            </div>
+            <div class="mrow">
+              <input class="mc mci rx" id="im20" type="number" value="0.0000" step="0.0001" />
+              <input class="mc mci gy" id="im21" type="number" value="0.0000" step="0.0001" />
+              <input class="mc mci bz" id="im22" type="number" value="1.0000" step="0.0001" />
+              <input class="mc mci tr" id="im23" type="number" value="0.0000" step="0.0001" />
+            </div>
+            <div class="mrow">
+              <span class="mc rx"> 0.0000</span>
+              <span class="mc gy"> 0.0000</span>
+              <span class="mc bz"> 0.0000</span>
+              <span class="mc tr"> 1.0000</span>
+            </div>
+          </div>
+          <div class="ik-actions">
+            <button class="ik-btn" id="ikGetEE">Get EE</button>
+            <button class="ik-btn" id="ikNormR">Norm R</button>
+            <label
+              style="font-size: 0.72rem; color: #6060a0; cursor: pointer; display: flex; align-items: center; gap: 5px"
+            >
+              <input type="checkbox" id="ikFullPose" style="accent-color: #aa44cc" />Full pose
+            </label>
+          </div>
+        </div>
       </div>
-    </div>
-
-  </div>
-</main>
-
-<script>
-// ── 4×4 Matrix (row-major) ──────────────────────────────────────────────────
-
-const I4 = () => [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1];
-
-function mmul(A, B) {
-  const R = new Array(16).fill(0);
-  for (let i = 0; i < 4; i++)
-    for (let j = 0; j < 4; j++)
-      for (let k = 0; k < 4; k++)
-        R[i*4+j] += A[i*4+k] * B[k*4+j];
-  return R;
-}
-
-const mRz = a => { const c=Math.cos(a),s=Math.sin(a); return [c,-s,0,0, s,c,0,0, 0,0,1,0, 0,0,0,1]; };
-const mRy = a => { const c=Math.cos(a),s=Math.sin(a); return [c,0,s,0, 0,1,0,0, -s,0,c,0, 0,0,0,1]; };
-const mRx = a => { const c=Math.cos(a),s=Math.sin(a); return [1,0,0,0, 0,c,-s,0, 0,s,c,0, 0,0,0,1]; };
-const mTx = d => [1,0,0,d, 0,1,0,0, 0,0,1,0, 0,0,0,1];
-const mTy = d => [1,0,0,0, 0,1,0,d, 0,0,1,0, 0,0,0,1];
-const mTz = d => [1,0,0,0, 0,1,0,0, 0,0,1,d, 0,0,0,1];
-
-const getRotM    = (ax,a) => ax==='x' ? mRx(a) : ax==='y' ? mRy(a) : mRz(a);
-const getAxisCol = (ax,F) => ax==='x' ? colX(F) : ax==='y' ? colY(F) : colZ(F);
-const ringCol    = a => a==='x' ? 'rgba(255,100,100,0.65)' : a==='y' ? 'rgba(100,210,100,0.65)' : 'rgba(160,160,255,0.65)';
-const getJointMat = (tp,ax,v) => tp==='p'
-  ? (ax==='x' ? mTx(v) : ax==='y' ? mTy(v) : mTz(v))
-  : getRotM(ax, v);
-
-const apT = (M,p) => [
-  M[0]*p[0]+M[1]*p[1]+M[2]*p[2]+M[3],
-  M[4]*p[0]+M[5]*p[1]+M[6]*p[2]+M[7],
-  M[8]*p[0]+M[9]*p[1]+M[10]*p[2]+M[11],
-];
-
-const colX = M => [M[0],M[4],M[8]];
-const colY = M => [M[1],M[5],M[9]];
-const colZ = M => [M[2],M[6],M[10]];
-
-const d2r = d => d*Math.PI/180;
-const r2d = r => r*180/Math.PI;
-
-function vnorm(v) {
-  const l = Math.hypot(v[0],v[1],v[2]);
-  return l>1e-10 ? [v[0]/l,v[1]/l,v[2]/l] : [1,0,0];
-}
-function cross(a,b) {
-  return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
-}
-
-function corrFrame(rotAxis, linkDir) {
-  const z = vnorm(rotAxis);
-  const ld = vnorm(linkDir);
-  const dp = ld[0]*z[0]+ld[1]*z[1]+ld[2]*z[2];
-  let xr = [ld[0]-dp*z[0], ld[1]-dp*z[1], ld[2]-dp*z[2]];
-  if (Math.hypot(xr[0],xr[1],xr[2]) < 1e-6) {
-    const fb = Math.abs(z[0]) < 0.9 ? [1,0,0] : [0,1,0];
-    const dp2 = fb[0]*z[0]+fb[1]*z[1]+fb[2]*z[2];
-    xr = [fb[0]-dp2*z[0], fb[1]-dp2*z[1], fb[2]-dp2*z[2]];
-  }
-  const x = vnorm(xr);
-  const y = cross(x,z);
-  return [x[0],y[0],-z[0],0, x[1],y[1],-z[1],0, x[2],y[2],-z[2],0, 0,0,0,1];
-}
-
-// ── Defaults & State ─────────────────────────────────────────────────────────
-
-const MIN_DOF = 1, MAX_DOF = 8;
-let numDOF = 3;
-
-const JOINT_LABEL = ['Base','Shoulder','Elbow','Wrist','Wrist 2','Wrist 3','Wrist 4','Wrist 5'];
-const LINK_LABEL  = ['Base link','Upper link','Fore link','Wrist link','Link 5','Link 6','Link 7','Link 8'];
-const AXIS_DEF    = ['z','y','y','y','z','y','z','y'];
-const ANGLE_DEF   = [30, 45, -30, 0, 0, 0, 0, 0];
-const LEN_DEF     = [1.2, 1.0, 0.8, 0.6, 0.5, 0.4, 0.35, 0.3];
-const SUBS        = ['₁','₂','₃','₄','₅','₆','₇','₈'];
-const SUPS        = ['⁰','¹','²','³','⁴','⁵','⁶','⁷','⁸'];
-
-const axes  = {};
-const types = {};
-let A = [...LEN_DEF];
-
-for (let j = 1; j <= MAX_DOF; j++) {
-  axes[j]  = AXIS_DEF[j-1];
-  types[j] = 'r';
-}
-
-// ── Forward Kinematics (N-DOF) ──────────────────────────────────────────────
-// Returns frames[0..N] and pos[0..N]:
-//   frames[i] = cumulative transform up to joint i+1 (0-indexed), frames[N] = EE frame
-//   pos[i]    = world position of joint i+1, pos[N] = EE position
-
-function fkN() {
-  const O = [0,0,0];
-  const pos = [O];
-  const frames = [];
-  let F = I4();
-
-  for (let i = 0; i < numDOF; i++) {
-    const j = i + 1;
-    F = i === 0
-      ? getJointMat(types[j], axes[j], jointVal(j))
-      : mmul(mmul(F, mTx(A[i-1])), getJointMat(types[j], axes[j], jointVal(j)));
-    frames.push(F);
-    if (i > 0) pos.push(apT(F, O));
-  }
-
-  const FEE = mmul(F, mTx(A[numDOF-1]));
-  frames.push(FEE);
-  pos.push(apT(FEE, O));
-
-  return { frames, pos };
-}
-
-function computeRelTransforms() {
-  const relT = [];
-  for (let i = 0; i < numDOF; i++) {
-    const j = i + 1;
-    relT.push(i === 0
-      ? getJointMat(types[j], axes[j], jointVal(j))
-      : mmul(mTx(A[i-1]), getJointMat(types[j], axes[j], jointVal(j))));
-  }
-  relT.push(mTx(A[numDOF-1]));
-  return relT;
-}
-
-// ZYX Euler angles from rotation matrix → [roll, pitch, yaw] degrees
-function matRPY(M) {
-  const pitch = Math.atan2(-M[8], Math.hypot(M[0],M[4]));
-  const yaw   = Math.atan2( M[4], M[0]);
-  const roll  = Math.atan2( M[9], M[10]);
-  return [r2d(roll), r2d(pitch), r2d(yaw)];
-}
-
-// ── Camera / Projection ─────────────────────────────────────────────────────
-
-let az=0.55, el=0.38, scale=145;
-let tgtAz=az, tgtEl=el, tgtScale=scale, animId=null, activeView='vIso';
-let panX=0, panY=0;
-
-const canvas = document.getElementById('rc');
-const ctx    = canvas.getContext('2d');
-
-function resize() {
-  const p = canvas.parentElement;
-  canvas.width  = p.clientWidth;
-  canvas.height = p.clientHeight;
-}
-
-function proj(p) {
-  const ca=Math.cos(az), sa=Math.sin(az);
-  const x1 =  p[0]*ca + p[1]*sa;
-  const y1 = -p[0]*sa + p[1]*ca;
-  const z1 =  p[2];
-  const ce=Math.cos(el), se=Math.sin(el);
-  const x2 = x1;
-  const z2 = -y1*se + z1*ce;
-  return { sx: canvas.width/2 + panX + x2*scale, sy: canvas.height/2 + panY - z2*scale };
-}
-
-function goTo(newAz, newEl, newScale, viewId) {
-  tgtAz=newAz; tgtEl=newEl; tgtScale=newScale;
-  panX=0; panY=0;
-  if (viewId !== undefined) setActive(viewId);
-  if (animId) cancelAnimationFrame(animId);
-  animId = requestAnimationFrame(animStep);
-}
-
-function animStep() {
-  const L = 0.14;
-  az    += (tgtAz    - az)    * L;
-  el    += (tgtEl    - el)    * L;
-  scale += (tgtScale - scale) * L;
-  draw();
-  const done = Math.abs(az-tgtAz)<3e-4 && Math.abs(el-tgtEl)<3e-4 && Math.abs(scale-tgtScale)<0.2;
-  if (done) { az=tgtAz; el=tgtEl; scale=tgtScale; animId=null; draw(); }
-  else animId = requestAnimationFrame(animStep);
-}
-
-function setActive(id) {
-  activeView = id;
-  document.querySelectorAll('.vbtn').forEach(b => b.classList.toggle('active', b.id===id));
-}
-
-// ── Drawing Helpers ─────────────────────────────────────────────────────────
-
-function line3(p1, p2, col, lw, dash=[]) {
-  const a=proj(p1), b=proj(p2);
-  ctx.beginPath();
-  ctx.moveTo(a.sx, a.sy);
-  ctx.lineTo(b.sx, b.sy);
-  ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.lineCap = 'round';
-  ctx.setLineDash(dash); ctx.stroke(); ctx.setLineDash([]);
-}
-
-function arrow3(origin, dir, len, col, lw, lbl='') {
-  const end = [origin[0]+dir[0]*len, origin[1]+dir[1]*len, origin[2]+dir[2]*len];
-  line3(origin, end, col, lw);
-  const a=proj(origin), b=proj(end);
-  const dx=b.sx-a.sx, dy=b.sy-a.sy, d=Math.hypot(dx,dy);
-  if (d < 2) return;
-  const ux=dx/d, uy=dy/d, AH=8, AW=4;
-  ctx.beginPath();
-  ctx.moveTo(b.sx, b.sy);
-  ctx.lineTo(b.sx-AH*ux-AW*uy, b.sy-AH*uy+AW*ux);
-  ctx.lineTo(b.sx-AH*ux+AW*uy, b.sy-AH*uy-AW*ux);
-  ctx.closePath(); ctx.fillStyle = col; ctx.fill();
-  if (lbl) {
-    ctx.font='bold 10px Segoe UI'; ctx.fillStyle=col;
-    ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(lbl, b.sx+ux*13, b.sy+uy*13);
-  }
-}
-
-function drawAxes(T, pos, len, lw, num='') {
-  arrow3(pos, colX(T), len, '#ff4444', lw, 'x'+num);
-  arrow3(pos, colY(T), len, '#44cc44', lw, 'y'+num);
-  arrow3(pos, colZ(T), len, '#4466ff', lw, 'z'+num);
-}
-
-function drawRing(center, axis, r, col, lw, n=40) {
-  const ax = vnorm(axis);
-  const tmp = Math.abs(ax[0]) < 0.8 ? [1,0,0] : [0,1,0];
-  const u = vnorm(cross(ax, tmp));
-  const v = vnorm(cross(ax, u));
-  ctx.beginPath();
-  for (let i=0; i<=n; i++) {
-    const a=(i/n)*Math.PI*2, c=Math.cos(a), s=Math.sin(a);
-    const p=[center[0]+r*(u[0]*c+v[0]*s), center[1]+r*(u[1]*c+v[1]*s), center[2]+r*(u[2]*c+v[2]*s)];
-    const sp=proj(p);
-    i===0 ? ctx.moveTo(sp.sx,sp.sy) : ctx.lineTo(sp.sx,sp.sy);
-  }
-  ctx.strokeStyle=col; ctx.lineWidth=lw; ctx.stroke();
-}
-
-function drawPrismaticIndicator(center, axisVec, r, col, lw) {
-  const a = vnorm(axisVec);
-  arrow3(center, a, r, col, lw);
-  arrow3(center, [-a[0],-a[1],-a[2]], r, col, lw);
-}
-
-function dot3(p, r, fill, stroke) {
-  const sp=proj(p);
-  ctx.beginPath(); ctx.arc(sp.sx, sp.sy, r, 0, Math.PI*2);
-  ctx.fillStyle=fill; ctx.fill();
-  if (stroke) { ctx.strokeStyle=stroke; ctx.lineWidth=1.5; ctx.stroke(); }
-}
-
-function drawLink(p1, p2, col, lw) {
-  line3(p1, p2, col.replace('rgb(','rgba(').replace(')',',0.25)'), lw+6);
-  line3(p1, p2, col, lw);
-}
-
-function drawGrid() {
-  const N=4, step=0.5;
-  for (let i=-N; i<=N; i++) {
-    const t=i*step, gcol=i===0?'#30305a':'#181830', glw=i===0?1.5:1;
-    line3([-N*step,t,0],[N*step,t,0], gcol, glw);
-    line3([t,-N*step,0],[t,N*step,0], gcol, glw);
-  }
-}
-
-function lerpRGB(t, c0, c1) {
-  return `rgb(${Math.round(c0[0]+(c1[0]-c0[0])*t)},${Math.round(c0[1]+(c1[1]-c0[1])*t)},${Math.round(c0[2]+(c1[2]-c0[2])*t)})`;
-}
-
-// ── Main Draw ───────────────────────────────────────────────────────────────
-
-function jointVal(j) {
-  const raw = parseFloat(document.getElementById('n'+j).value) || 0;
-  return types[j]==='r' ? d2r(raw) : raw;
-}
-
-function draw() {
-  for (let i = 0; i < numDOF; i++) {
-    const el = document.getElementById('nl'+(i+1));
-    if (el) A[i] = parseFloat(el.value) || LEN_DEF[i];
-  }
-
-  const { frames, pos } = fkN();
-  const N = numDOF;
-  const FEE = frames[N];
-  const pEE = pos[N];
-  const W = I4();
-
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  drawGrid();
-
-  // World frame
-  arrow3([0,0,0], colX(W), 0.5, 'rgba(255,90,90,0.65)',   2, 'xW');
-  arrow3([0,0,0], colY(W), 0.5, 'rgba(80,210,80,0.65)',   2, 'yW');
-  arrow3([0,0,0], colZ(W), 0.5, 'rgba(120,145,255,0.65)', 2, 'zW');
-  { const sp=proj([0,0,0]);
-    ctx.font='bold 9px Consolas'; ctx.fillStyle='#707088';
-    ctx.textAlign='right'; ctx.textBaseline='bottom';
-    ctx.fillText('{W}', sp.sx-8, sp.sy-4); }
-
-  // EE shadow drop
-  line3(pEE, [pEE[0],pEE[1],0], 'rgba(120,140,220,0.25)', 1, [5,5]);
-  dot3([pEE[0],pEE[1],0], 3, 'rgba(120,140,220,0.4)', null);
-
-  // Links
-  for (let i = 0; i < N; i++) {
-    const t = N > 1 ? i/(N-1) : 0;
-    const lw = Math.max(3, 7 - i*(3/Math.max(1,N-1)));
-    drawLink(pos[i], pos[i+1], lerpRGB(t,[80,80,200],[50,160,220]), lw);
-  }
-
-  // Joints, frames, labels
-  for (let i = 0; i < N; i++) {
-    const j = i + 1;
-    const prevFrame = i === 0 ? W : frames[i-1];
-    const axv = getAxisCol(axes[j], prevFrame);
-    const t = N > 1 ? i/(N-1) : 0;
-    const fill   = lerpRGB(t, [88,88,238], [56,184,238]);
-    const stroke = lerpRGB(t, [144,144,255], [128,221,255]);
-
-    // Ring or prismatic indicator
-    const r = Math.max(0.08, 0.18 - i*0.015);
-    types[j]==='r'
-      ? drawRing(pos[i], axv, r, ringCol(axes[j]), 2.5)
-      : drawPrismaticIndicator(pos[i], axv, r, ringCol(axes[j]), 2.5);
-
-    // Frame axes
-    const CF = corrFrame(axv, colX(frames[i]));
-    const al = Math.max(0.15, 0.3 - i*0.02);
-    drawAxes(CF, pos[i], al, 2.2, i);
-
-    // Joint node
-    dot3(pos[i], Math.max(6, 11-i), fill, stroke);
-
-    // Joint label
-    { const sp=proj(pos[i]);
-      ctx.font='bold 11px Segoe UI'; ctx.fillStyle=stroke;
-      ctx.textAlign='center'; ctx.textBaseline='bottom';
-      ctx.fillText('J'+SUBS[i], sp.sx, sp.sy-15); }
-
-    // Frame number
-    { const sp=proj(pos[i]);
-      ctx.font='bold 9px Consolas'; ctx.fillStyle='#707090';
-      ctx.textAlign='left'; ctx.textBaseline='top';
-      ctx.fillText('{'+i+'}', sp.sx+7, sp.sy+5); }
-  }
-
-  // EE frame
-  drawAxes(FEE, pEE, 0.21, 1.6, N);
-  dot3(pEE, 7, '#ffdd44', '#ffaa00');
-  { const sp=proj(pEE);
-    ctx.font='bold 11px Segoe UI'; ctx.fillStyle='#ffdd44';
-    ctx.textAlign='center'; ctx.textBaseline='bottom';
-    ctx.fillText('EE', sp.sx, sp.sy-15); }
-  { const sp=proj(pEE);
-    ctx.font='bold 9px Consolas'; ctx.fillStyle='#707090';
-    ctx.textAlign='left'; ctx.textBaseline='top';
-    ctx.fillText('{'+N+'}', sp.sx+7, sp.sy+5); }
-
-  // IK target
-  if (ikMode) {
-    const tp=getIkPos();
-    dot3(tp, 9, '#ff44aa', '#ff88dd');
-    drawAxes(ikTargetM, tp, 0.18, 1.4);
-    line3(pEE, tp, 'rgba(255,68,170,0.5)', 1.5, [5,4]);
-    { const sp=proj(tp);
-      ctx.font='bold 11px Segoe UI'; ctx.fillStyle='#ff55bb';
-      ctx.textAlign='center'; ctx.textBaseline='bottom';
-      ctx.fillText('T', sp.sx, sp.sy-15); }
-  }
-
-  // Camera overlay
-  const viewNames = {vIso:'Isometric',vTop:'Top (XY)',vFront:'Front (XZ)',vSide:'Side (YZ)'};
-  document.getElementById('camInfo').innerHTML =
-    `<span style="color:#4a4a90;font-weight:700">${viewNames[activeView]||'Custom'}</span><br>` +
-    `az ${r2d(az).toFixed(1)}°  el ${r2d(el).toFixed(1)}°  zoom ×${(scale/145).toFixed(2)}`;
-
-  updateUI(frames, pos);
-}
-
-// ── UI Update ────────────────────────────────────────────────────────────────
-
-function fmt(v, d=3) { return (v>=0?' ':'')+v.toFixed(d); }
-
-function fmtMat(M) {
-  return [0,1,2,3].map(r =>
-    `<div class="mrow">${[0,1,2,3].map(c =>
-      `<span class="mc ${['rx','gy','bz','tr'][c]}">${fmt(M[r*4+c])}</span>`
-    ).join('')}</div>`
-  ).join('');
-}
-
-function updateUI(frames, pos) {
-  const N = numDOF;
-  const FEE = frames[N];
-  const pEE = pos[N];
-
-  document.getElementById('ex').textContent = pEE[0].toFixed(4)+' m';
-  document.getElementById('ey').textContent = pEE[1].toFixed(4)+' m';
-  document.getElementById('ez').textContent = pEE[2].toFixed(4)+' m';
-
-  const [roll,pitch,yaw] = matRPY(FEE);
-  document.getElementById('er').textContent  = roll.toFixed(1)+'°';
-  document.getElementById('ep').textContent  = pitch.toFixed(1)+'°';
-  document.getElementById('ey2').textContent = yaw.toFixed(1)+'°';
-
-  let rows = '';
-  for (let i = 0; i < N; i++) {
-    rows += `<tr><td class="jname">J${SUBS[i]}</td>
-      <td>${pos[i][0].toFixed(3)}</td><td>${pos[i][1].toFixed(3)}</td><td>${pos[i][2].toFixed(3)}</td></tr>`;
-  }
-  rows += `<tr><td class="jname">EE</td>
-    <td>${pEE[0].toFixed(3)}</td><td>${pEE[1].toFixed(3)}</td><td>${pEE[2].toFixed(3)}</td></tr>`;
-  document.getElementById('jtbody').innerHTML = rows;
-
-  document.getElementById('mtx').innerHTML = fmtMat(FEE);
-
-  const relT = computeRelTransforms();
-  let relHtml = '';
-  for (let i = 0; i <= N; i++) {
-    const from = SUPS[i] || String(i);
-    const to   = i < N ? SUBS[i] : 'ₑ';
-    const desc = i === 0
-      ? `<span style="color:#3d3d60">World → J${SUBS[0]}</span>`
-      : i < N
-        ? `<span style="color:#3d3d60">J${SUBS[i-1]} → J${SUBS[i]}</span>`
-        : `<span style="color:#3d3d60">J${SUBS[N-1]} → EE</span>`;
-    relHtml += `<div class="mlbl">${from}T${to} &nbsp;${desc}</div><div class="mwrap">${fmtMat(relT[i])}</div>`;
-  }
-  document.getElementById('relMtx').innerHTML = relHtml;
-}
-
-// ── Dynamic UI Building ──────────────────────────────────────────────────────
-
-function buildJointConfig() {
-  let html = '';
-  for (let j = 1; j <= numDOF; j++) {
-    const i   = j - 1;
-    const tp  = types[j], ax = axes[j];
-    const sym = tp === 'r' ? 'θ' : 'd';
-    const [mn,mx] = tp === 'r' ? (j===1 ? [-180,180] : [-150,150]) : [-2,2];
-    const step = tp === 'r' ? 1 : 0.05;
-    const unit = tp === 'r' ? '°' : 'm';
-    const lbl  = `${sym}${SUBS[i]} — ${JOINT_LABEL[i]}`;
-    const val  = tp === 'r' ? (ANGLE_DEF[i] || 0) : 0;
-
-    html += `<div class="jg">
+    </main>
+
+    <script>
+      // ── 4×4 Matrix (row-major) ──────────────────────────────────────────────────
+
+      const I4 = () => [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+
+      function mmul(A, B) {
+        const R = new Array(16).fill(0);
+        for (let i = 0; i < 4; i++)
+          for (let j = 0; j < 4; j++) for (let k = 0; k < 4; k++) R[i * 4 + j] += A[i * 4 + k] * B[k * 4 + j];
+        return R;
+      }
+
+      const mRz = (a) => {
+        const c = Math.cos(a),
+          s = Math.sin(a);
+        return [c, -s, 0, 0, s, c, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+      };
+      const mRy = (a) => {
+        const c = Math.cos(a),
+          s = Math.sin(a);
+        return [c, 0, s, 0, 0, 1, 0, 0, -s, 0, c, 0, 0, 0, 0, 1];
+      };
+      const mRx = (a) => {
+        const c = Math.cos(a),
+          s = Math.sin(a);
+        return [1, 0, 0, 0, 0, c, -s, 0, 0, s, c, 0, 0, 0, 0, 1];
+      };
+      const mTx = (d) => [1, 0, 0, d, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+      const mTy = (d) => [1, 0, 0, 0, 0, 1, 0, d, 0, 0, 1, 0, 0, 0, 0, 1];
+      const mTz = (d) => [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, d, 0, 0, 0, 1];
+
+      const getRotM = (ax, a) => (ax === "x" ? mRx(a) : ax === "y" ? mRy(a) : mRz(a));
+      const getAxisCol = (ax, F) => (ax === "x" ? colX(F) : ax === "y" ? colY(F) : colZ(F));
+      const ringCol = (a) =>
+        a === "x" ? "rgba(255,100,100,0.65)" : a === "y" ? "rgba(100,210,100,0.65)" : "rgba(160,160,255,0.65)";
+      const getJointMat = (tp, ax, v) =>
+        tp === "p" ? (ax === "x" ? mTx(v) : ax === "y" ? mTy(v) : mTz(v)) : getRotM(ax, v);
+
+      const apT = (M, p) => [
+        M[0] * p[0] + M[1] * p[1] + M[2] * p[2] + M[3],
+        M[4] * p[0] + M[5] * p[1] + M[6] * p[2] + M[7],
+        M[8] * p[0] + M[9] * p[1] + M[10] * p[2] + M[11],
+      ];
+
+      const colX = (M) => [M[0], M[4], M[8]];
+      const colY = (M) => [M[1], M[5], M[9]];
+      const colZ = (M) => [M[2], M[6], M[10]];
+
+      const d2r = (d) => (d * Math.PI) / 180;
+      const r2d = (r) => (r * 180) / Math.PI;
+
+      function vnorm(v) {
+        const l = Math.hypot(v[0], v[1], v[2]);
+        return l > 1e-10 ? [v[0] / l, v[1] / l, v[2] / l] : [1, 0, 0];
+      }
+      function cross(a, b) {
+        return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+      }
+
+      function corrFrame(rotAxis, linkDir) {
+        const z = vnorm(rotAxis);
+        const ld = vnorm(linkDir);
+        const dp = ld[0] * z[0] + ld[1] * z[1] + ld[2] * z[2];
+        let xr = [ld[0] - dp * z[0], ld[1] - dp * z[1], ld[2] - dp * z[2]];
+        if (Math.hypot(xr[0], xr[1], xr[2]) < 1e-6) {
+          const fb = Math.abs(z[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0];
+          const dp2 = fb[0] * z[0] + fb[1] * z[1] + fb[2] * z[2];
+          xr = [fb[0] - dp2 * z[0], fb[1] - dp2 * z[1], fb[2] - dp2 * z[2]];
+        }
+        const x = vnorm(xr);
+        const y = cross(x, z);
+        return [x[0], y[0], -z[0], 0, x[1], y[1], -z[1], 0, x[2], y[2], -z[2], 0, 0, 0, 0, 1];
+      }
+
+      // ── Defaults & State ─────────────────────────────────────────────────────────
+
+      const MIN_DOF = 1,
+        MAX_DOF = 8;
+      let numDOF = 3;
+
+      const JOINT_LABEL = ["Base", "Shoulder", "Elbow", "Wrist", "Wrist 2", "Wrist 3", "Wrist 4", "Wrist 5"];
+      const LINK_LABEL = ["Base link", "Upper link", "Fore link", "Wrist link", "Link 5", "Link 6", "Link 7", "Link 8"];
+      const AXIS_DEF = ["z", "y", "y", "y", "z", "y", "z", "y"];
+      const ANGLE_DEF = [30, 45, -30, 0, 0, 0, 0, 0];
+      const LEN_DEF = [1.2, 1.0, 0.8, 0.6, 0.5, 0.4, 0.35, 0.3];
+      const SUBS = ["₁", "₂", "₃", "₄", "₅", "₆", "₇", "₈"];
+      const SUPS = ["⁰", "¹", "²", "³", "⁴", "⁵", "⁶", "⁷", "⁸"];
+
+      const axes = {};
+      const types = {};
+      let A = [...LEN_DEF];
+
+      for (let j = 1; j <= MAX_DOF; j++) {
+        axes[j] = AXIS_DEF[j - 1];
+        types[j] = "r";
+      }
+
+      // ── Forward Kinematics (N-DOF) ──────────────────────────────────────────────
+      // Returns frames[0..N] and pos[0..N]:
+      //   frames[i] = cumulative transform up to joint i+1 (0-indexed), frames[N] = EE frame
+      //   pos[i]    = world position of joint i+1, pos[N] = EE position
+
+      function fkN() {
+        const O = [0, 0, 0];
+        const pos = [O];
+        const frames = [];
+        let F = I4();
+
+        for (let i = 0; i < numDOF; i++) {
+          const j = i + 1;
+          F =
+            i === 0
+              ? getJointMat(types[j], axes[j], jointVal(j))
+              : mmul(mmul(F, mTx(A[i - 1])), getJointMat(types[j], axes[j], jointVal(j)));
+          frames.push(F);
+          if (i > 0) pos.push(apT(F, O));
+        }
+
+        const FEE = mmul(F, mTx(A[numDOF - 1]));
+        frames.push(FEE);
+        pos.push(apT(FEE, O));
+
+        return { frames, pos };
+      }
+
+      function computeRelTransforms() {
+        const relT = [];
+        for (let i = 0; i < numDOF; i++) {
+          const j = i + 1;
+          relT.push(
+            i === 0
+              ? getJointMat(types[j], axes[j], jointVal(j))
+              : mmul(mTx(A[i - 1]), getJointMat(types[j], axes[j], jointVal(j))),
+          );
+        }
+        relT.push(mTx(A[numDOF - 1]));
+        return relT;
+      }
+
+      // ── Velocity Kinematics ──────────────────────────────────────────────────────
+
+      // Returns N columns [jvx,jvy,jvz,jwx,jwy,jwz] — the geometric Jacobian
+      function computeJacobian(frames, pos) {
+        const N = numDOF,
+          pEE = pos[N],
+          W = I4();
+        return Array.from({ length: N }, (_, i) => {
+          const j = i + 1;
+          const z = getAxisCol(axes[j], i === 0 ? W : frames[i - 1]);
+          if (types[j] === "r") {
+            const dp = [pEE[0] - pos[i][0], pEE[1] - pos[i][1], pEE[2] - pos[i][2]];
+            const jv = cross(z, dp);
+            return [jv[0], jv[1], jv[2], z[0], z[1], z[2]];
+          }
+          return [z[0], z[1], z[2], 0, 0, 0];
+        });
+      }
+
+      function getJointVelocity(j) {
+        const el = document.getElementById("qd" + j);
+        const raw = parseFloat(el ? el.value : 0) || 0;
+        return types[j] === "r" ? d2r(raw) : raw;
+      }
+
+      // Returns { v:[vx,vy,vz], omega:[wx,wy,wz] } — EE twist from J·qdot
+      function computeEEVelocity(J) {
+        const v = [0, 0, 0],
+          omega = [0, 0, 0];
+        for (let i = 0; i < numDOF; i++) {
+          const qd = getJointVelocity(i + 1);
+          for (let k = 0; k < 3; k++) {
+            v[k] += J[i][k] * qd;
+            omega[k] += J[i][k + 3] * qd;
+          }
+        }
+        return { v, omega };
+      }
+
+      // ZYX Euler angles from rotation matrix → [roll, pitch, yaw] degrees
+      function matRPY(M) {
+        const pitch = Math.atan2(-M[8], Math.hypot(M[0], M[4]));
+        const yaw = Math.atan2(M[4], M[0]);
+        const roll = Math.atan2(M[9], M[10]);
+        return [r2d(roll), r2d(pitch), r2d(yaw)];
+      }
+
+      // ── Camera / Projection ─────────────────────────────────────────────────────
+
+      let az = 0.55,
+        el = 0.38,
+        scale = 145;
+      let tgtAz = az,
+        tgtEl = el,
+        tgtScale = scale,
+        animId = null,
+        activeView = "vIso";
+      let panX = 0,
+        panY = 0;
+
+      const canvas = document.getElementById("rc");
+      const ctx = canvas.getContext("2d");
+
+      function resize() {
+        const p = canvas.parentElement;
+        canvas.width = p.clientWidth;
+        canvas.height = p.clientHeight;
+      }
+
+      function proj(p) {
+        const ca = Math.cos(az),
+          sa = Math.sin(az);
+        const x1 = p[0] * ca + p[1] * sa;
+        const y1 = -p[0] * sa + p[1] * ca;
+        const z1 = p[2];
+        const ce = Math.cos(el),
+          se = Math.sin(el);
+        const x2 = x1;
+        const z2 = -y1 * se + z1 * ce;
+        return { sx: canvas.width / 2 + panX + x2 * scale, sy: canvas.height / 2 + panY - z2 * scale };
+      }
+
+      function goTo(newAz, newEl, newScale, viewId) {
+        tgtAz = newAz;
+        tgtEl = newEl;
+        tgtScale = newScale;
+        panX = 0;
+        panY = 0;
+        if (viewId !== undefined) setActive(viewId);
+        if (animId) cancelAnimationFrame(animId);
+        animId = requestAnimationFrame(animStep);
+      }
+
+      function animStep() {
+        const L = 0.14;
+        az += (tgtAz - az) * L;
+        el += (tgtEl - el) * L;
+        scale += (tgtScale - scale) * L;
+        draw();
+        const done = Math.abs(az - tgtAz) < 3e-4 && Math.abs(el - tgtEl) < 3e-4 && Math.abs(scale - tgtScale) < 0.2;
+        if (done) {
+          az = tgtAz;
+          el = tgtEl;
+          scale = tgtScale;
+          animId = null;
+          draw();
+        } else animId = requestAnimationFrame(animStep);
+      }
+
+      function setActive(id) {
+        activeView = id;
+        document.querySelectorAll(".vbtn").forEach((b) => b.classList.toggle("active", b.id === id));
+      }
+
+      // ── Drawing Helpers ─────────────────────────────────────────────────────────
+
+      function line3(p1, p2, col, lw, dash = []) {
+        const a = proj(p1),
+          b = proj(p2);
+        ctx.beginPath();
+        ctx.moveTo(a.sx, a.sy);
+        ctx.lineTo(b.sx, b.sy);
+        ctx.strokeStyle = col;
+        ctx.lineWidth = lw;
+        ctx.lineCap = "round";
+        ctx.setLineDash(dash);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      function arrow3(origin, dir, len, col, lw, lbl = "") {
+        const end = [origin[0] + dir[0] * len, origin[1] + dir[1] * len, origin[2] + dir[2] * len];
+        line3(origin, end, col, lw);
+        const a = proj(origin),
+          b = proj(end);
+        const dx = b.sx - a.sx,
+          dy = b.sy - a.sy,
+          d = Math.hypot(dx, dy);
+        if (d < 2) return;
+        const ux = dx / d,
+          uy = dy / d,
+          AH = 8,
+          AW = 4;
+        ctx.beginPath();
+        ctx.moveTo(b.sx, b.sy);
+        ctx.lineTo(b.sx - AH * ux - AW * uy, b.sy - AH * uy + AW * ux);
+        ctx.lineTo(b.sx - AH * ux + AW * uy, b.sy - AH * uy - AW * ux);
+        ctx.closePath();
+        ctx.fillStyle = col;
+        ctx.fill();
+        if (lbl) {
+          ctx.font = "bold 10px Segoe UI";
+          ctx.fillStyle = col;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(lbl, b.sx + ux * 13, b.sy + uy * 13);
+        }
+      }
+
+      function drawAxes(T, pos, len, lw, num = "") {
+        const yDir = colY(T);
+        arrow3(pos, colX(T), len, "#ff4444", lw, "x" + num);
+        arrow3(pos, [-yDir[0], -yDir[1], -yDir[2]], len, "#44cc44", lw, "y" + num);
+        arrow3(pos, colZ(T), len, "#4466ff", lw, "z" + num);
+      }
+
+      function drawRing(center, axis, r, col, lw, n = 40) {
+        const ax = vnorm(axis);
+        const tmp = Math.abs(ax[0]) < 0.8 ? [1, 0, 0] : [0, 1, 0];
+        const u = vnorm(cross(ax, tmp));
+        const v = vnorm(cross(ax, u));
+        ctx.beginPath();
+        for (let i = 0; i <= n; i++) {
+          const a = (i / n) * Math.PI * 2,
+            c = Math.cos(a),
+            s = Math.sin(a);
+          const p = [
+            center[0] + r * (u[0] * c + v[0] * s),
+            center[1] + r * (u[1] * c + v[1] * s),
+            center[2] + r * (u[2] * c + v[2] * s),
+          ];
+          const sp = proj(p);
+          i === 0 ? ctx.moveTo(sp.sx, sp.sy) : ctx.lineTo(sp.sx, sp.sy);
+        }
+        ctx.strokeStyle = col;
+        ctx.lineWidth = lw;
+        ctx.stroke();
+      }
+
+      function drawPrismaticIndicator(center, axisVec, r, col, lw) {
+        const a = vnorm(axisVec);
+        arrow3(center, a, r, col, lw);
+        arrow3(center, [-a[0], -a[1], -a[2]], r, col, lw);
+      }
+
+      function dot3(p, r, fill, stroke) {
+        const sp = proj(p);
+        ctx.beginPath();
+        ctx.arc(sp.sx, sp.sy, r, 0, Math.PI * 2);
+        ctx.fillStyle = fill;
+        ctx.fill();
+        if (stroke) {
+          ctx.strokeStyle = stroke;
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        }
+      }
+
+      function drawLink(p1, p2, col, lw) {
+        line3(p1, p2, col.replace("rgb(", "rgba(").replace(")", ",0.25)"), lw + 6);
+        line3(p1, p2, col, lw);
+      }
+
+      function drawGrid() {
+        const N = 4,
+          step = 0.5;
+        const cAxis = lightMode ? "#b0b0d8" : "#30305a";
+        const cLine = lightMode ? "#d8d8ec" : "#181830";
+        for (let i = -N; i <= N; i++) {
+          const t = i * step,
+            gcol = i === 0 ? cAxis : cLine,
+            glw = i === 0 ? 1.5 : 1;
+          line3([-N * step, t, 0], [N * step, t, 0], gcol, glw);
+          line3([t, -N * step, 0], [t, N * step, 0], gcol, glw);
+        }
+      }
+
+      function lerpRGB(t, c0, c1) {
+        return `rgb(${Math.round(c0[0] + (c1[0] - c0[0]) * t)},${Math.round(c0[1] + (c1[1] - c0[1]) * t)},${Math.round(c0[2] + (c1[2] - c0[2]) * t)})`;
+      }
+
+      // ── Main Draw ───────────────────────────────────────────────────────────────
+
+      function jointVal(j) {
+        const raw = parseFloat(document.getElementById("n" + j).value) || 0;
+        return types[j] === "r" ? d2r(raw) : raw;
+      }
+
+      function draw() {
+        for (let i = 0; i < numDOF; i++) {
+          const el = document.getElementById("nl" + (i + 1));
+          if (el) A[i] = parseFloat(el.value) || LEN_DEF[i];
+        }
+
+        const { frames, pos } = fkN();
+        const N = numDOF;
+        const FEE = frames[N];
+        const pEE = pos[N];
+        const W = I4();
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawGrid();
+
+        // World frame
+        if (frameVis.world) {
+          const yW = colY(W);
+          arrow3([0, 0, 0], colX(W), 0.5, "rgba(255,90,90,0.65)", 2, "xW");
+          arrow3([0, 0, 0], [-yW[0], -yW[1], -yW[2]], 0.5, "rgba(80,210,80,0.65)", 2, "yW");
+          arrow3([0, 0, 0], colZ(W), 0.5, "rgba(120,145,255,0.65)", 2, "zW");
+          {
+            const sp = proj([0, 0, 0]);
+            ctx.font = "bold 9px Consolas";
+            ctx.fillStyle = lightMode ? "#8080a8" : "#707088";
+            ctx.textAlign = "right";
+            ctx.textBaseline = "bottom";
+            ctx.fillText("{W}", sp.sx - 8, sp.sy - 4);
+          }
+        }
+
+        // EE shadow drop
+        line3(pEE, [pEE[0], pEE[1], 0], "rgba(120,140,220,0.25)", 1, [5, 5]);
+        dot3([pEE[0], pEE[1], 0], 3, "rgba(120,140,220,0.4)", null);
+
+        // Links
+        for (let i = 0; i < N; i++) {
+          const t = N > 1 ? i / (N - 1) : 0;
+          const lw = Math.max(3, 7 - i * (3 / Math.max(1, N - 1)));
+          drawLink(pos[i], pos[i + 1], lerpRGB(t, [80, 80, 200], [50, 160, 220]), lw);
+        }
+
+        // Joints, frames, labels
+        for (let i = 0; i < N; i++) {
+          const j = i + 1;
+          const prevFrame = i === 0 ? W : frames[i - 1];
+          const axv = getAxisCol(axes[j], prevFrame);
+          const t = N > 1 ? i / (N - 1) : 0;
+          const fill = lerpRGB(t, [88, 88, 238], [56, 184, 238]);
+          const stroke = lerpRGB(t, [144, 144, 255], [128, 221, 255]);
+
+          // Ring or prismatic indicator
+          const r = Math.max(0.08, 0.18 - i * 0.015);
+          types[j] === "r"
+            ? drawRing(pos[i], axv, r, ringCol(axes[j]), 2.5)
+            : drawPrismaticIndicator(pos[i], axv, r, ringCol(axes[j]), 2.5);
+
+          // Frame axes
+          if (frameVis.j[i]) {
+            const al = Math.max(0.15, 0.3 - i * 0.02);
+            drawAxes(frames[i], pos[i], al, 2.2, i);
+          }
+
+          // Joint node
+          dot3(pos[i], Math.max(6, 11 - i), fill, stroke);
+
+          // Joint label
+          {
+            const sp = proj(pos[i]);
+            ctx.font = "bold 11px Segoe UI";
+            ctx.fillStyle = stroke;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "bottom";
+            ctx.fillText("J" + SUBS[i], sp.sx, sp.sy - 15);
+          }
+
+          // Frame number
+          if (frameVis.j[i]) {
+            const sp = proj(pos[i]);
+            ctx.font = "bold 9px Consolas";
+            ctx.fillStyle = lightMode ? "#8080a8" : "#707090";
+            ctx.textAlign = "left";
+            ctx.textBaseline = "top";
+            ctx.fillText("{" + i + "}", sp.sx + 7, sp.sy + 5);
+          }
+        }
+
+        // EE frame
+        if (frameVis.ee) {
+          drawAxes(FEE, pEE, 0.21, 1.6, N);
+        }
+        dot3(pEE, 7, "#ffdd44", "#ffaa00");
+        {
+          const sp = proj(pEE);
+          ctx.font = "bold 11px Segoe UI";
+          ctx.fillStyle = "#ffdd44";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "bottom";
+          ctx.fillText("EE", sp.sx, sp.sy - 15);
+        }
+        if (frameVis.ee) {
+          const sp = proj(pEE);
+          ctx.font = "bold 9px Consolas";
+          ctx.fillStyle = lightMode ? "#8080a8" : "#707090";
+          ctx.textAlign = "left";
+          ctx.textBaseline = "top";
+          ctx.fillText("{" + N + "}", sp.sx + 7, sp.sy + 5);
+        }
+
+        // IK target
+        if (ikMode) {
+          const tp = getIkPos();
+          dot3(tp, 9, "#ff44aa", "#ff88dd");
+          drawAxes(ikTargetM, tp, 0.18, 1.4);
+          line3(pEE, tp, "rgba(255,68,170,0.5)", 1.5, [5, 4]);
+          {
+            const sp = proj(tp);
+            ctx.font = "bold 11px Segoe UI";
+            ctx.fillStyle = "#ff55bb";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "bottom";
+            ctx.fillText("T", sp.sx, sp.sy - 15);
+          }
+        }
+
+        // Velocity arrows at EE
+        const J = computeJacobian(frames, pos);
+        const { v: eeV, omega: eeW } = computeEEVelocity(J);
+        const vmag = Math.hypot(eeV[0], eeV[1], eeV[2]);
+        const wmag = Math.hypot(eeW[0], eeW[1], eeW[2]);
+        if (vmag > 0.005) {
+          const sc = Math.min(vmag, 4) * 0.22;
+          arrow3(pEE, [eeV[0] / vmag, eeV[1] / vmag, eeV[2] / vmag], sc, "#ffcc44", 2.5, "v");
+        }
+        if (wmag > 0.005) {
+          const sc = Math.min(wmag, 4) * 0.18;
+          arrow3(pEE, [eeW[0] / wmag, eeW[1] / wmag, eeW[2] / wmag], sc, "#cc88ff", 2, "ω");
+        }
+
+        // Camera overlay
+        const viewNames = { vIso: "Isometric", vTop: "Top (XY)", vFront: "Front (XZ)", vSide: "Side (YZ)" };
+        document.getElementById("camInfo").innerHTML =
+          `<span style="color:#4a4a90;font-weight:700">${viewNames[activeView] || "Custom"}</span><br>` +
+          `az ${r2d(az).toFixed(1)}°  el ${r2d(el).toFixed(1)}°  zoom ×${(scale / 145).toFixed(2)}`;
+
+        updateUI(frames, pos, J, eeV, eeW);
+      }
+
+      // ── UI Update ────────────────────────────────────────────────────────────────
+
+      function fmt(v, d = 3) {
+        return (v >= 0 ? " " : "") + v.toFixed(d);
+      }
+
+      // C·M·C where C = diag(1,−1,1,1): correct change-of-basis for the reversed Y convention
+      function applyYConv(M) {
+        const R = [...M];
+        R[1] = -M[1]; R[4] = -M[4]; R[6] = -M[6]; R[7] = -M[7]; R[9] = -M[9];
+        return R;
+      }
+
+      function fmtMat(M) {
+        return [0, 1, 2, 3]
+          .map(
+            (r) =>
+              `<div class="mrow">${[0, 1, 2, 3]
+                .map((c) => `<span class="mc ${["rx", "gy", "bz", "tr"][c]}">${fmt(M[r * 4 + c])}</span>`)
+                .join("")}</div>`,
+          )
+          .join("");
+      }
+
+      function updateUI(frames, pos, J, eeV, eeW) {
+        const N = numDOF;
+        const FEE = frames[N];
+        const pEE = pos[N];
+
+        document.getElementById("ex").textContent = pEE[0].toFixed(4) + " m";
+        document.getElementById("ey").textContent = (-pEE[1]).toFixed(4) + " m";
+        document.getElementById("ez").textContent = pEE[2].toFixed(4) + " m";
+
+        const [roll, pitch, yaw] = matRPY(applyYConv(FEE));
+        document.getElementById("er").textContent = roll.toFixed(1) + "°";
+        document.getElementById("ep").textContent = pitch.toFixed(1) + "°";
+        document.getElementById("ey2").textContent = yaw.toFixed(1) + "°";
+
+        let rows = "";
+        for (let i = 0; i < N; i++) {
+          rows += `<tr><td class="jname">J${SUBS[i]}</td>
+      <td>${pos[i][0].toFixed(3)}</td><td>${(-pos[i][1]).toFixed(3)}</td><td>${pos[i][2].toFixed(3)}</td></tr>`;
+        }
+        rows += `<tr><td class="jname">EE</td>
+    <td>${pEE[0].toFixed(3)}</td><td>${(-pEE[1]).toFixed(3)}</td><td>${pEE[2].toFixed(3)}</td></tr>`;
+        document.getElementById("jtbody").innerHTML = rows;
+
+        document.getElementById("mtx").innerHTML = fmtMat(applyYConv(FEE));
+
+        const relT = computeRelTransforms();
+        let relHtml = "";
+        for (let i = 0; i <= N; i++) {
+          const from = SUPS[i] || String(i);
+          const to = i < N ? SUBS[i] : "ₑ";
+          const desc =
+            i === 0
+              ? `<span style="color:#3d3d60">World → J${SUBS[0]}</span>`
+              : i < N
+                ? `<span style="color:#3d3d60">J${SUBS[i - 1]} → J${SUBS[i]}</span>`
+                : `<span style="color:#3d3d60">J${SUBS[N - 1]} → EE</span>`;
+          relHtml += `<div class="mlbl">${from}T${to} &nbsp;${desc}</div><div class="mwrap">${fmtMat(applyYConv(relT[i]))}</div>`;
+        }
+        document.getElementById("relMtx").innerHTML = relHtml;
+
+        // ── EE Velocity ────────────────────────────────────────────────────────────
+        if (J && eeV && eeW) {
+          const ids = ["ee_vx", "ee_vy", "ee_vz", "ee_wx", "ee_wy", "ee_wz"];
+          const vals = [...eeV, ...eeW];
+          vals[1] = -vals[1];  // vy
+          vals[4] = -vals[4];  // ωy
+          ids.forEach((id, k) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = vals[k].toFixed(4);
+          });
+          const vmag = Math.hypot(eeV[0], eeV[1], eeV[2]);
+          const wmag = Math.hypot(eeW[0], eeW[1], eeW[2]);
+          const vmagEl = document.getElementById("ee_vmag");
+          const wmagEl = document.getElementById("ee_wmag");
+          if (vmagEl) vmagEl.textContent = vmag.toFixed(4);
+          if (wmagEl) wmagEl.textContent = wmag.toFixed(4);
+
+          // ── Jacobian matrix display ───────────────────────────────────────────────
+          const rowLabels = ["vx", "vy", "vz", "ωx", "ωy", "ωz"];
+          let jHtml = '<table class="jac-tbl"><thead><tr><th class="jac-ch"></th>';
+          for (let i = 0; i < N; i++) jHtml += `<th class="jac-ch">q̇${SUBS[i]}</th>`;
+          jHtml += "</tr></thead><tbody>";
+          for (let r = 0; r < 6; r++) {
+            if (r === 3) jHtml += '<tr class="jac-sep"><td colspan="' + (N + 1) + '"></td></tr>';
+            const cls = r < 3 ? "jac-v" : "jac-w";
+            jHtml += `<tr><td class="jac-rl ${cls}">${rowLabels[r]}</td>`;
+            for (let i = 0; i < N; i++) jHtml += `<td class="${cls}">${fmt((r === 1 || r === 4) ? -J[i][r] : J[i][r], 3)}</td>`;
+            jHtml += "</tr>";
+          }
+          jHtml += "</tbody></table>";
+          document.getElementById("jacContainer").innerHTML = `<div class="jac-wrap">${jHtml}</div>`;
+        }
+      }
+
+      // ── Frame Visibility ─────────────────────────────────────────────────────────
+
+      const frameVis = { world: true, ee: true, j: Array(8).fill(true) };
+
+      function buildFrameVisCard() {
+        let html = '<div class="fv-row">';
+        html += `<button class="fvbtn fv-world" data-fv="world">World</button>`;
+        for (let i = 0; i < numDOF; i++) {
+          html += `<button class="fvbtn" data-fv="j${i}">J${i + 1}</button>`;
+        }
+        html += `<button class="fvbtn fv-ee" data-fv="ee">EE</button>`;
+        html += "</div>";
+        document.getElementById("frameVisContainer").innerHTML = html;
+
+        document.querySelectorAll(".fvbtn").forEach((btn) => {
+          const fv = btn.dataset.fv;
+          const on = fv === "world" ? frameVis.world : fv === "ee" ? frameVis.ee : frameVis.j[parseInt(fv.slice(1))];
+          btn.classList.toggle("fv-on", on);
+          btn.addEventListener("click", () => {
+            if (fv === "world") frameVis.world = !frameVis.world;
+            else if (fv === "ee") frameVis.ee = !frameVis.ee;
+            else frameVis.j[parseInt(fv.slice(1))] = !frameVis.j[parseInt(fv.slice(1))];
+            btn.classList.toggle("fv-on");
+            draw();
+          });
+        });
+      }
+
+      // ── Dynamic UI Building ──────────────────────────────────────────────────────
+
+      function buildJointConfig() {
+        let html = "";
+        for (let j = 1; j <= numDOF; j++) {
+          const i = j - 1;
+          const tp = types[j],
+            ax = axes[j];
+          const sym = tp === "r" ? "θ" : "d";
+          const [mn, mx] = tp === "r" ? (j === 1 ? [-180, 180] : [-150, 150]) : [-2, 2];
+          const step = tp === "r" ? 1 : 0.05;
+          const unit = tp === "r" ? "°" : "m";
+          const lbl = `${sym}${SUBS[i]} — ${JOINT_LABEL[i]}`;
+          const val = tp === "r" ? ANGLE_DEF[i] || 0 : 0;
+
+          html += `<div class="jg">
       <div class="jh">
         <span class="jlabel" id="jl${j}">${lbl}</span>
         <div class="jcontrols">
           <div class="typsel">
-            <button class="typbtn typ-r${tp==='r'?' active':''}" data-j="${j}" data-t="r">R</button>
-            <button class="typbtn typ-p${tp==='p'?' active':''}" data-j="${j}" data-t="p">P</button>
+            <button class="typbtn typ-r${tp === "r" ? " active" : ""}" data-j="${j}" data-t="r">R</button>
+            <button class="typbtn typ-p${tp === "p" ? " active" : ""}" data-j="${j}" data-t="p">P</button>
           </div>
           <div class="axsel">
-            <button class="axbtn ax-x${ax==='x'?' active':''}" data-j="${j}" data-a="x">X</button>
-            <button class="axbtn ax-y${ax==='y'?' active':''}" data-j="${j}" data-a="y">Y</button>
-            <button class="axbtn ax-z${ax==='z'?' active':''}" data-j="${j}" data-a="z">Z</button>
+            <button class="axbtn ax-x${ax === "x" ? " active" : ""}" data-j="${j}" data-a="x">X</button>
+            <button class="axbtn ax-y${ax === "y" ? " active" : ""}" data-j="${j}" data-a="y">Y</button>
+            <button class="axbtn ax-z${ax === "z" ? " active" : ""}" data-j="${j}" data-a="z">Z</button>
           </div>
         </div>
       </div>
@@ -810,15 +2092,15 @@ function buildJointConfig() {
         <span class="deg" id="u${j}">${unit}</span>
       </div>
     </div>`;
-  }
-  document.getElementById('jointConfigContainer').innerHTML = html;
-}
+        }
+        document.getElementById("jointConfigContainer").innerHTML = html;
+      }
 
-function buildLinkConfig() {
-  let html = '';
-  for (let i = 0; i < numDOF; i++) {
-    const j = i + 1;
-    html += `<div class="jg">
+      function buildLinkConfig() {
+        let html = "";
+        for (let i = 0; i < numDOF; i++) {
+          const j = i + 1;
+          html += `<div class="jg">
       <div class="jh"><span class="jlabel">L${SUBS[i]} — ${LINK_LABEL[i]}</span></div>
       <div class="jctrl">
         <input type="range"  id="sl${j}" min="0.1" max="3" value="${A[i].toFixed(2)}" step="0.05">
@@ -826,363 +2108,555 @@ function buildLinkConfig() {
         <span class="deg">m</span>
       </div>
     </div>`;
-  }
-  document.getElementById('linkConfigContainer').innerHTML = html;
-}
+        }
+        document.getElementById("linkConfigContainer").innerHTML = html;
+      }
 
-function attachJointListeners() {
-  document.querySelectorAll('.typbtn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const j=+btn.dataset.j, t=btn.dataset.t;
-      document.querySelectorAll(`.typbtn[data-j="${j}"]`).forEach(b =>
-        b.classList.toggle('active', b.dataset.t===t));
-      setJointType(j, t);
-    });
-  });
+      function attachJointListeners() {
+        document.querySelectorAll(".typbtn").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const j = +btn.dataset.j,
+              t = btn.dataset.t;
+            document
+              .querySelectorAll(`.typbtn[data-j="${j}"]`)
+              .forEach((b) => b.classList.toggle("active", b.dataset.t === t));
+            setJointType(j, t);
+          });
+        });
 
-  document.querySelectorAll('.axbtn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const j=+btn.dataset.j, a=btn.dataset.a;
-      axes[j] = a;
-      document.querySelectorAll(`.axbtn[data-j="${j}"]`).forEach(b =>
-        b.classList.toggle('active', b.dataset.a===a));
-      draw();
-    });
-  });
+        document.querySelectorAll(".axbtn").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const j = +btn.dataset.j,
+              a = btn.dataset.a;
+            axes[j] = a;
+            document
+              .querySelectorAll(`.axbtn[data-j="${j}"]`)
+              .forEach((b) => b.classList.toggle("active", b.dataset.a === a));
+            draw();
+          });
+        });
 
-  for (let j = 1; j <= numDOF; j++) sync('s'+j, 'n'+j);
-}
+        for (let j = 1; j <= numDOF; j++) sync("s" + j, "n" + j);
+      }
 
-function attachLinkListeners() {
-  for (let j = 1; j <= numDOF; j++) sync('sl'+j, 'nl'+j);
-}
+      function attachLinkListeners() {
+        for (let j = 1; j <= numDOF; j++) sync("sl" + j, "nl" + j);
+      }
 
-function setJointType(j, tp) {
-  types[j] = tp;
-  const s=document.getElementById('s'+j), n=document.getElementById('n'+j);
-  const u=document.getElementById('u'+j), lbl=document.getElementById('jl'+j);
-  if (tp === 'p') {
-    s.min=n.min=-2; s.max=n.max=2; s.step=n.step=0.05;
-    s.value=n.value=0; u.textContent='m';
-    lbl.textContent=`d${SUBS[j-1]} — ${JOINT_LABEL[j-1]}`;
-  } else {
-    const [mn,mx] = j===1 ? [-180,180] : [-150,150];
-    s.min=n.min=mn; s.max=n.max=mx; s.step=n.step=1;
-    s.value=n.value=0; u.textContent='°';
-    lbl.textContent=`θ${SUBS[j-1]} — ${JOINT_LABEL[j-1]}`;
-  }
-  draw();
-}
+      function buildVelocityConfig() {
+        let html = "";
+        for (let j = 1; j <= numDOF; j++) {
+          const i = j - 1;
+          const isR = types[j] === "r";
+          const [mn, mx, step] = isR ? [-360, 360, 1] : [-3, 3, 0.05];
+          const unit = isR ? "°/s" : "m/s";
+          html += `<div class="jg">
+      <div class="jh">
+        <span class="jlabel">q̇${SUBS[i]}</span>
+        <span class="deg" id="qdu${j}">${unit}</span>
+      </div>
+      <div class="jctrl">
+        <input type="range"  id="qds${j}" min="${mn}" max="${mx}" value="0" step="${step}">
+        <input type="number" id="qd${j}"  min="${mn}" max="${mx}" value="0" step="${step}">
+      </div>
+    </div>`;
+        }
+        document.getElementById("velConfigContainer").innerHTML = html;
+        attachVelocityListeners();
+      }
 
-function setDOF(n) {
-  // Snapshot current joint values before rebuilding
-  const savedAngles = {}, savedLens = {};
-  for (let j = 1; j <= numDOF; j++) {
-    const el = document.getElementById('n'+j);
-    if (el) savedAngles[j] = el.value;
-  }
-  for (let i = 0; i < numDOF; i++) {
-    const el = document.getElementById('nl'+(i+1));
-    if (el) { A[i] = parseFloat(el.value) || LEN_DEF[i]; savedLens[i] = A[i]; }
-  }
+      function attachVelocityListeners() {
+        for (let j = 1; j <= numDOF; j++) sync("qds" + j, "qd" + j);
+      }
 
-  numDOF = Math.max(MIN_DOF, Math.min(MAX_DOF, n));
+      function setJointType(j, tp) {
+        types[j] = tp;
+        const s = document.getElementById("s" + j),
+          n = document.getElementById("n" + j);
+        const u = document.getElementById("u" + j),
+          lbl = document.getElementById("jl" + j);
+        if (tp === "p") {
+          s.min = n.min = -2;
+          s.max = n.max = 2;
+          s.step = n.step = 0.05;
+          s.value = n.value = 0;
+          u.textContent = "m";
+          lbl.textContent = `d${SUBS[j - 1]} — ${JOINT_LABEL[j - 1]}`;
+        } else {
+          const [mn, mx] = j === 1 ? [-180, 180] : [-150, 150];
+          s.min = n.min = mn;
+          s.max = n.max = mx;
+          s.step = n.step = 1;
+          s.value = n.value = 0;
+          u.textContent = "°";
+          lbl.textContent = `θ${SUBS[j - 1]} — ${JOINT_LABEL[j - 1]}`;
+        }
+        // Sync velocity input for this joint
+        const qds = document.getElementById("qds" + j),
+          qdEl = document.getElementById("qd" + j);
+        const qduEl = document.getElementById("qdu" + j);
+        if (qds && qdEl) {
+          const [mn, mx, step, unit] = tp === "p" ? [-3, 3, 0.05, "m/s"] : [-360, 360, 1, "°/s"];
+          qds.min = qdEl.min = mn;
+          qds.max = qdEl.max = mx;
+          qds.step = qdEl.step = step;
+          qds.value = qdEl.value = 0;
+          if (qduEl) qduEl.textContent = unit;
+        }
+        draw();
+      }
 
-  document.getElementById('dofVal').textContent = numDOF;
-  document.getElementById('pageTitle').textContent = `${numDOF}-DOF Robot — Forward Kinematics`;
-  document.title = `${numDOF}-DOF Robot — Forward Kinematics`;
-  document.getElementById('dofDec').disabled = numDOF <= MIN_DOF;
-  document.getElementById('dofInc').disabled = numDOF >= MAX_DOF;
+      function setDOF(n) {
+        // Snapshot current joint values before rebuilding
+        const savedAngles = {},
+          savedLens = {};
+        for (let j = 1; j <= numDOF; j++) {
+          const el = document.getElementById("n" + j);
+          if (el) savedAngles[j] = el.value;
+        }
+        for (let i = 0; i < numDOF; i++) {
+          const el = document.getElementById("nl" + (i + 1));
+          if (el) {
+            A[i] = parseFloat(el.value) || LEN_DEF[i];
+            savedLens[i] = A[i];
+          }
+        }
 
-  buildJointConfig();
-  buildLinkConfig();
-  attachJointListeners();
-  attachLinkListeners();
+        numDOF = Math.max(MIN_DOF, Math.min(MAX_DOF, n));
 
-  // Restore previously set values
-  for (let j = 1; j <= numDOF; j++) {
-    if (savedAngles[j] !== undefined) {
-      const s=document.getElementById('s'+j), nEl=document.getElementById('n'+j);
-      if (s && nEl) { s.value = nEl.value = savedAngles[j]; }
-    }
-  }
-  for (let i = 0; i < numDOF; i++) {
-    if (savedLens[i] !== undefined) {
-      const s=document.getElementById('sl'+(i+1)), nEl=document.getElementById('nl'+(i+1));
-      if (s && nEl) { s.value = nEl.value = savedLens[i].toFixed(2); }
-    }
-  }
+        document.getElementById("dofVal").textContent = numDOF;
+        document.getElementById("pageTitle").textContent = `${numDOF}-DOF Robot — Forward Kinematics`;
+        document.title = `${numDOF}-DOF Robot — Forward Kinematics`;
+        document.getElementById("dofDec").disabled = numDOF <= MIN_DOF;
+        document.getElementById("dofInc").disabled = numDOF >= MAX_DOF;
 
-  if (ikMode) {
-    const { frames } = fkN();
-    ikTargetM = [...frames[numDOF]];
-    syncIkMatrixToUI();
-  }
+        buildFrameVisCard();
+        buildJointConfig();
+        buildLinkConfig();
+        buildVelocityConfig();
+        attachJointListeners();
+        attachLinkListeners();
 
-  draw();
-}
+        // Restore previously set values
+        for (let j = 1; j <= numDOF; j++) {
+          if (savedAngles[j] !== undefined) {
+            const s = document.getElementById("s" + j),
+              nEl = document.getElementById("n" + j);
+            if (s && nEl) {
+              s.value = nEl.value = savedAngles[j];
+            }
+          }
+        }
+        for (let i = 0; i < numDOF; i++) {
+          if (savedLens[i] !== undefined) {
+            const s = document.getElementById("sl" + (i + 1)),
+              nEl = document.getElementById("nl" + (i + 1));
+            if (s && nEl) {
+              s.value = nEl.value = savedLens[i].toFixed(2);
+            }
+          }
+        }
 
-// ── Input Sync ───────────────────────────────────────────────────────────────
+        if (ikMode) {
+          const { frames } = fkN();
+          ikTargetM = [...frames[numDOF]];
+          syncIkMatrixToUI();
+        }
 
-function sync(sid, nid) {
-  const sl=document.getElementById(sid), nu=document.getElementById(nid);
-  if (!sl || !nu) return;
-  sl.addEventListener('input', () => { nu.value=sl.value; draw(); });
-  nu.addEventListener('change', () => {
-    const v=Math.max(parseFloat(nu.min),Math.min(parseFloat(nu.max),parseFloat(nu.value)||0));
-    nu.value=v; sl.value=v; draw();
-  });
-  nu.addEventListener('keydown', e => { if(e.key==='Enter') nu.dispatchEvent(new Event('change')); });
-}
+        draw();
+      }
 
-// ── Inverse Kinematics (N-DOF Jacobian Transpose) ───────────────────────────
+      // ── Input Sync ───────────────────────────────────────────────────────────────
 
-let ikMode=false, ikAnimId=null, ikTargetDragging=false;
-let ikTargetM=[1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1];
-let ikFullPose=false;
+      function sync(sid, nid) {
+        const sl = document.getElementById(sid),
+          nu = document.getElementById(nid);
+        if (!sl || !nu) return;
+        sl.addEventListener("input", () => {
+          nu.value = sl.value;
+          draw();
+        });
+        nu.addEventListener("change", () => {
+          const v = Math.max(parseFloat(nu.min), Math.min(parseFloat(nu.max), parseFloat(nu.value) || 0));
+          nu.value = v;
+          sl.value = v;
+          draw();
+        });
+        nu.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") nu.dispatchEvent(new Event("change"));
+        });
+      }
 
-const vdot = (a,b) => a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+      // ── Inverse Kinematics (N-DOF Jacobian Transpose) ───────────────────────────
 
-function getIkPos() { return [ikTargetM[3], ikTargetM[7], ikTargetM[11]]; }
+      let lightMode = true;
+      let ikMode = false,
+        ikAnimId = null,
+        ikTargetDragging = false;
+      let ikTargetM = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+      let ikFullPose = false;
 
-function syncIkMatrixToUI() {
-  for (let r=0; r<3; r++)
-    for (let c=0; c<4; c++) {
-      const el=document.getElementById('im'+r+c);
-      if (el) el.value = ikTargetM[r*4+c].toFixed(4);
-    }
-}
+      const vdot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 
-function normalizeIkRotation() {
-  let x=vnorm([ikTargetM[0],ikTargetM[4],ikTargetM[8]]);
-  let y=[ikTargetM[1],ikTargetM[5],ikTargetM[9]];
-  const d=vdot(y,x);
-  y=vnorm([y[0]-d*x[0],y[1]-d*x[1],y[2]-d*x[2]]);
-  const z=cross(x,y);
-  ikTargetM[0]=x[0]; ikTargetM[4]=x[1]; ikTargetM[8]=x[2];
-  ikTargetM[1]=y[0]; ikTargetM[5]=y[1]; ikTargetM[9]=y[2];
-  ikTargetM[2]=z[0]; ikTargetM[6]=z[1]; ikTargetM[10]=z[2];
-  syncIkMatrixToUI();
-}
+      function getIkPos() {
+        return [ikTargetM[3], ikTargetM[7], ikTargetM[11]];
+      }
 
-function setJointVal(j, rawVal) {
-  const nEl=document.getElementById('n'+j), sEl=document.getElementById('s'+j);
-  if (!nEl || !sEl) return;
-  const dv = types[j]==='r' ? r2d(rawVal) : rawVal;
-  const c  = Math.max(parseFloat(nEl.min), Math.min(parseFloat(nEl.max), dv));
-  nEl.value = sEl.value = c.toFixed(types[j]==='r' ? 2 : 4);
-}
+      function syncIkMatrixToUI() {
+        for (let r = 0; r < 3; r++)
+          for (let c = 0; c < 4; c++) {
+            const el = document.getElementById("im" + r + c);
+            if (el) el.value = ikTargetM[r * 4 + c].toFixed(4);
+          }
+      }
 
-function ikStep() {
-  const { frames, pos } = fkN();
-  const N = numDOF;
-  const FEE = frames[N];
-  const pEE = pos[N];
-  const W = I4();
+      function normalizeIkRotation() {
+        let x = vnorm([ikTargetM[0], ikTargetM[4], ikTargetM[8]]);
+        let y = [ikTargetM[1], ikTargetM[5], ikTargetM[9]];
+        const d = vdot(y, x);
+        y = vnorm([y[0] - d * x[0], y[1] - d * x[1], y[2] - d * x[2]]);
+        const z = cross(x, y);
+        ikTargetM[0] = x[0];
+        ikTargetM[4] = x[1];
+        ikTargetM[8] = x[2];
+        ikTargetM[1] = y[0];
+        ikTargetM[5] = y[1];
+        ikTargetM[9] = y[2];
+        ikTargetM[2] = z[0];
+        ikTargetM[6] = z[1];
+        ikTargetM[10] = z[2];
+        syncIkMatrixToUI();
+      }
 
-  const pd = getIkPos();
-  const ep = [pd[0]-pEE[0], pd[1]-pEE[1], pd[2]-pEE[2]];
+      function setJointVal(j, rawVal) {
+        const nEl = document.getElementById("n" + j),
+          sEl = document.getElementById("s" + j);
+        if (!nEl || !sEl) return;
+        const dv = types[j] === "r" ? r2d(rawVal) : rawVal;
+        const c = Math.max(parseFloat(nEl.min), Math.min(parseFloat(nEl.max), dv));
+        nEl.value = sEl.value = c.toFixed(types[j] === "r" ? 2 : 4);
+      }
 
-  const xe=colX(FEE),ye=colY(FEE),ze=colZ(FEE);
-  const xd=colX(ikTargetM),yd=colY(ikTargetM),zd=colZ(ikTargetM);
-  const c1=cross(xe,xd), c2=cross(ye,yd), c3=cross(ze,zd);
-  const eo = ikFullPose ? [
-    0.5*(c1[0]+c2[0]+c3[0]),
-    0.5*(c1[1]+c2[1]+c3[1]),
-    0.5*(c1[2]+c2[2]+c3[2]),
-  ] : [0,0,0];
+      function ikStep() {
+        const { frames, pos } = fkN();
+        const N = numDOF;
+        const FEE = frames[N];
+        const pEE = pos[N];
+        const W = I4();
 
-  if (vdot(ep,ep)<1e-8 && vdot(eo,eo)<1e-8) return;
+        const pd = getIkPos();
+        const ep = [pd[0] - pEE[0], pd[1] - pEE[1], pd[2] - pEE[2]];
 
-  const jvs=[], jws=[];
-  for (let i = 0; i < N; i++) {
-    const j = i + 1;
-    const prevFrame = i === 0 ? W : frames[i-1];
-    const z = getAxisCol(axes[j], prevFrame);
-    const pj = pos[i];
-    jvs.push(types[j]==='r'
-      ? cross(z, [pEE[0]-pj[0], pEE[1]-pj[1], pEE[2]-pj[2]])
-      : [z[0],z[1],z[2]]);
-    jws.push(types[j]==='r' ? z : [0,0,0]);
-  }
+        const xe = colX(FEE),
+          ye = colY(FEE),
+          ze = colZ(FEE);
+        const xd = colX(ikTargetM),
+          yd = colY(ikTargetM),
+          zd = colZ(ikTargetM);
+        const c1 = cross(xe, xd),
+          c2 = cross(ye, yd),
+          c3 = cross(ze, zd);
+        const eo = ikFullPose
+          ? [0.5 * (c1[0] + c2[0] + c3[0]), 0.5 * (c1[1] + c2[1] + c3[1]), 0.5 * (c1[2] + c2[2] + c3[2])]
+          : [0, 0, 0];
 
-  const wp=1.0, wo=0.5;
-  const dq = jvs.map((jv,i) => wp*vdot(jv,ep) + wo*vdot(jws[i],eo));
+        if (vdot(ep, ep) < 1e-8 && vdot(eo, eo) < 1e-8) return;
 
-  const Jvdq=[0,0,0], Jwdq=[0,0,0];
-  for (let i=0; i<N; i++) {
-    for (let k=0; k<3; k++) { Jvdq[k]+=jvs[i][k]*dq[i]; Jwdq[k]+=jws[i][k]*dq[i]; }
-  }
+        const jvs = [],
+          jws = [];
+        for (let i = 0; i < N; i++) {
+          const j = i + 1;
+          const prevFrame = i === 0 ? W : frames[i - 1];
+          const z = getAxisCol(axes[j], prevFrame);
+          const pj = pos[i];
+          jvs.push(types[j] === "r" ? cross(z, [pEE[0] - pj[0], pEE[1] - pj[1], pEE[2] - pj[2]]) : [z[0], z[1], z[2]]);
+          jws.push(types[j] === "r" ? z : [0, 0, 0]);
+        }
 
-  const dqn = dq.reduce((s,v)=>s+v*v, 0);
-  if (dqn < 1e-12) return;
-  const alpha = dqn / (wp*wp*vdot(Jvdq,Jvdq) + wo*wo*vdot(Jwdq,Jwdq) + 0.01);
+        const wp = 1.0,
+          wo = 0.5;
+        const dq = jvs.map((jv, i) => wp * vdot(jv, ep) + wo * vdot(jws[i], eo));
 
-  for (let i=0; i<N; i++) setJointVal(i+1, jointVal(i+1) + alpha*dq[i]);
-}
+        const Jvdq = [0, 0, 0],
+          Jwdq = [0, 0, 0];
+        for (let i = 0; i < N; i++) {
+          for (let k = 0; k < 3; k++) {
+            Jvdq[k] += jvs[i][k] * dq[i];
+            Jwdq[k] += jws[i][k] * dq[i];
+          }
+        }
 
-function ikLoop() {
-  if (!ikMode) { ikAnimId=null; return; }
-  for (let i=0; i<10; i++) ikStep();
-  draw();
-  ikAnimId = requestAnimationFrame(ikLoop);
-}
+        const dqn = dq.reduce((s, v) => s + v * v, 0);
+        if (dqn < 1e-12) return;
+        const alpha = dqn / (wp * wp * vdot(Jvdq, Jvdq) + wo * wo * vdot(Jwdq, Jwdq) + 0.01);
 
-function moveIkTarget(dx, dy) {
-  const sr=[Math.cos(az),Math.sin(az),0];
-  const su=[Math.sin(az)*Math.sin(el),-Math.cos(az)*Math.sin(el),Math.cos(el)];
-  ikTargetM[3]  += (dx*sr[0]-dy*su[0])/scale;
-  ikTargetM[7]  += (dx*sr[1]-dy*su[1])/scale;
-  ikTargetM[11] += (dx*sr[2]-dy*su[2])/scale;
-  syncIkMatrixToUI();
-}
+        for (let i = 0; i < N; i++) setJointVal(i + 1, jointVal(i + 1) + alpha * dq[i]);
+      }
 
-function nearIkTarget(cx, cy) {
-  if (!ikMode) return false;
-  const sp=proj(getIkPos());
-  return Math.hypot(cx-sp.sx, cy-sp.sy) < 22;
-}
+      function ikLoop() {
+        if (!ikMode) {
+          ikAnimId = null;
+          return;
+        }
+        for (let i = 0; i < 10; i++) ikStep();
+        draw();
+        ikAnimId = requestAnimationFrame(ikLoop);
+      }
 
-// ── Mouse / Touch Orbit ──────────────────────────────────────────────────────
+      function moveIkTarget(dx, dy) {
+        const sr = [Math.cos(az), Math.sin(az), 0];
+        const su = [Math.sin(az) * Math.sin(el), -Math.cos(az) * Math.sin(el), Math.cos(el)];
+        ikTargetM[3] += (dx * sr[0] - dy * su[0]) / scale;
+        ikTargetM[7] += (dx * sr[1] - dy * su[1]) / scale;
+        ikTargetM[11] += (dx * sr[2] - dy * su[2]) / scale;
+        syncIkMatrixToUI();
+      }
 
-let dragging=false, panning=false, lx=0, ly=0, pinchDist0=0;
+      function nearIkTarget(cx, cy) {
+        if (!ikMode) return false;
+        const sp = proj(getIkPos());
+        return Math.hypot(cx - sp.sx, cy - sp.sy) < 22;
+      }
 
-function stopAnim() {
-  if (animId) { cancelAnimationFrame(animId); animId=null; }
-  activeView='';
-  document.querySelectorAll('.vbtn:not(.fit)').forEach(b=>b.classList.remove('active'));
-}
+      // ── Mouse / Touch Orbit ──────────────────────────────────────────────────────
 
-canvas.addEventListener('mousedown', e => {
-  if (e.button===1) { e.preventDefault(); panning=true; }
-  else if (nearIkTarget(e.clientX,e.clientY)) { ikTargetDragging=true; }
-  else if (e.button===0) { stopAnim(); dragging=true; }
-  lx=e.clientX; ly=e.clientY;
-});
-canvas.addEventListener('auxclick', e => { if(e.button===1) e.preventDefault(); });
-window.addEventListener('mouseup', e => {
-  if (e.button===1) panning=false;
-  else { dragging=false; ikTargetDragging=false; }
-});
-window.addEventListener('mousemove', e => {
-  const dx=e.clientX-lx, dy=e.clientY-ly;
-  lx=e.clientX; ly=e.clientY;
-  if (ikTargetDragging) { moveIkTarget(dx,dy); if(!ikAnimId) draw(); return; }
-  if (panning) { panX+=dx; panY+=dy; draw(); return; }
-  if (!dragging) return;
-  az += dx*0.007;
-  el  = Math.max(-1.56, Math.min(1.56, el+dy*0.007));
-  tgtAz=az; tgtEl=el;
-  draw();
-});
-canvas.addEventListener('wheel', e => {
-  e.preventDefault();
-  scale = tgtScale = Math.max(50, Math.min(600, scale*(e.deltaY>0?0.92:1.09)));
-  draw();
-}, {passive:false});
+      let dragging = false,
+        panning = false,
+        lx = 0,
+        ly = 0,
+        pinchDist0 = 0;
 
-canvas.addEventListener('touchstart', e => {
-  stopAnim();
-  if (e.touches.length===1) {
-    const t0=e.touches[0];
-    nearIkTarget(t0.clientX,t0.clientY) ? ikTargetDragging=true : dragging=true;
-    lx=t0.clientX; ly=t0.clientY;
-  } else if (e.touches.length===2) {
-    dragging=false; ikTargetDragging=false;
-    pinchDist0=Math.hypot(e.touches[1].clientX-e.touches[0].clientX,e.touches[1].clientY-e.touches[0].clientY);
-  }
-}, {passive:true});
-canvas.addEventListener('touchend', e => {
-  if (e.touches.length===0) { dragging=false; ikTargetDragging=false; }
-});
-canvas.addEventListener('touchmove', e => {
-  if (e.touches.length===2) {
-    e.preventDefault();
-    const d=Math.hypot(e.touches[1].clientX-e.touches[0].clientX,e.touches[1].clientY-e.touches[0].clientY);
-    if (pinchDist0>0) scale=tgtScale=Math.max(50,Math.min(600,scale*(d/pinchDist0)));
-    pinchDist0=d; draw(); return;
-  }
-  if (e.touches.length!==1) return;
-  const t0=e.touches[0];
-  const dx=t0.clientX-lx, dy=t0.clientY-ly;
-  lx=t0.clientX; ly=t0.clientY;
-  if (ikTargetDragging) { e.preventDefault(); moveIkTarget(dx,dy); if(!ikAnimId) draw(); return; }
-  if (!dragging) return;
-  e.preventDefault();
-  az += dx*0.007;
-  el  = Math.max(-1.56, Math.min(1.56, el+dy*0.007));
-  tgtAz=az; tgtEl=el;
-  draw();
-}, {passive:false});
+      function stopAnim() {
+        if (animId) {
+          cancelAnimationFrame(animId);
+          animId = null;
+        }
+        activeView = "";
+        document.querySelectorAll(".vbtn:not(.fit)").forEach((b) => b.classList.remove("active"));
+      }
 
-// ── View Presets ─────────────────────────────────────────────────────────────
+      canvas.addEventListener("mousedown", (e) => {
+        if (e.button === 1) {
+          e.preventDefault();
+          panning = true;
+        } else if (nearIkTarget(e.clientX, e.clientY)) {
+          ikTargetDragging = true;
+        } else if (e.button === 0) {
+          stopAnim();
+          dragging = true;
+        }
+        lx = e.clientX;
+        ly = e.clientY;
+      });
+      canvas.addEventListener("auxclick", (e) => {
+        if (e.button === 1) e.preventDefault();
+      });
+      window.addEventListener("mouseup", (e) => {
+        if (e.button === 1) panning = false;
+        else {
+          dragging = false;
+          ikTargetDragging = false;
+        }
+      });
+      window.addEventListener("mousemove", (e) => {
+        const dx = e.clientX - lx,
+          dy = e.clientY - ly;
+        lx = e.clientX;
+        ly = e.clientY;
+        if (ikTargetDragging) {
+          moveIkTarget(dx, dy);
+          if (!ikAnimId) draw();
+          return;
+        }
+        if (panning) {
+          panX += dx;
+          panY += dy;
+          draw();
+          return;
+        }
+        if (!dragging) return;
+        az += dx * 0.007;
+        el = Math.max(-1.56, Math.min(1.56, el + dy * 0.007));
+        tgtAz = az;
+        tgtEl = el;
+        draw();
+      });
+      canvas.addEventListener(
+        "wheel",
+        (e) => {
+          e.preventDefault();
+          scale = tgtScale = Math.max(50, Math.min(600, scale * (e.deltaY > 0 ? 0.92 : 1.09)));
+          draw();
+        },
+        { passive: false },
+      );
 
-const PI2 = Math.PI/2;
-const VIEWS = { vIso:[0.55,0.38,145], vTop:[0,PI2,145], vFront:[0,0,145], vSide:[PI2,0,145] };
+      canvas.addEventListener(
+        "touchstart",
+        (e) => {
+          stopAnim();
+          if (e.touches.length === 1) {
+            const t0 = e.touches[0];
+            nearIkTarget(t0.clientX, t0.clientY) ? (ikTargetDragging = true) : (dragging = true);
+            lx = t0.clientX;
+            ly = t0.clientY;
+          } else if (e.touches.length === 2) {
+            dragging = false;
+            ikTargetDragging = false;
+            pinchDist0 = Math.hypot(
+              e.touches[1].clientX - e.touches[0].clientX,
+              e.touches[1].clientY - e.touches[0].clientY,
+            );
+          }
+        },
+        { passive: true },
+      );
+      canvas.addEventListener("touchend", (e) => {
+        if (e.touches.length === 0) {
+          dragging = false;
+          ikTargetDragging = false;
+        }
+      });
+      canvas.addEventListener(
+        "touchmove",
+        (e) => {
+          if (e.touches.length === 2) {
+            e.preventDefault();
+            const d = Math.hypot(
+              e.touches[1].clientX - e.touches[0].clientX,
+              e.touches[1].clientY - e.touches[0].clientY,
+            );
+            if (pinchDist0 > 0) scale = tgtScale = Math.max(50, Math.min(600, scale * (d / pinchDist0)));
+            pinchDist0 = d;
+            draw();
+            return;
+          }
+          if (e.touches.length !== 1) return;
+          const t0 = e.touches[0];
+          const dx = t0.clientX - lx,
+            dy = t0.clientY - ly;
+          lx = t0.clientX;
+          ly = t0.clientY;
+          if (ikTargetDragging) {
+            e.preventDefault();
+            moveIkTarget(dx, dy);
+            if (!ikAnimId) draw();
+            return;
+          }
+          if (!dragging) return;
+          e.preventDefault();
+          az += dx * 0.007;
+          el = Math.max(-1.56, Math.min(1.56, el + dy * 0.007));
+          tgtAz = az;
+          tgtEl = el;
+          draw();
+        },
+        { passive: false },
+      );
 
-document.querySelectorAll('.vbtn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    if (btn.id==='vFit') { tgtScale=145; panX=0; panY=0; if(!animId) animId=requestAnimationFrame(animStep); return; }
-    if (btn.id==='vIK') return;
-    const [a,e,s]=VIEWS[btn.id];
-    goTo(a,e,s,btn.id);
-  });
-});
+      // ── View Presets ─────────────────────────────────────────────────────────────
 
-document.getElementById('vIK').addEventListener('click', () => {
-  ikMode = !ikMode;
-  document.getElementById('vIK').classList.toggle('ik-on', ikMode);
-  document.getElementById('ikMatCard').style.display = ikMode ? 'block' : 'none';
-  if (ikMode) {
-    const { frames } = fkN();
-    ikTargetM = [...frames[numDOF]];
-    syncIkMatrixToUI();
-    if (!ikAnimId) ikLoop();
-  } else {
-    if (ikAnimId) { cancelAnimationFrame(ikAnimId); ikAnimId=null; }
-  }
-  draw();
-});
+      const PI2 = Math.PI / 2;
+      const VIEWS = { vIso: [0.55, 0.38, 145], vTop: [0, PI2, 145], vFront: [0, 0, 145], vSide: [PI2, 0, 145] };
 
-// ── IK Matrix UI ─────────────────────────────────────────────────────────────
+      document.querySelectorAll(".vbtn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          if (btn.id === "vFit") {
+            tgtScale = 145;
+            panX = 0;
+            panY = 0;
+            if (!animId) animId = requestAnimationFrame(animStep);
+            return;
+          }
+          if (btn.id === "vIK") return;
+          const [a, e, s] = VIEWS[btn.id];
+          goTo(a, e, s, btn.id);
+        });
+      });
 
-document.getElementById('ikGetEE').addEventListener('click', () => {
-  const { frames } = fkN();
-  ikTargetM = [...frames[numDOF]];
-  syncIkMatrixToUI();
-});
+      document.getElementById("vIK").addEventListener("click", () => {
+        ikMode = !ikMode;
+        document.getElementById("vIK").classList.toggle("ik-on", ikMode);
+        document.getElementById("ikMatCard").style.display = ikMode ? "block" : "none";
+        document.getElementById("legendIKRow").classList.toggle("legend-ik", !ikMode);
+        if (ikMode) {
+          const { frames } = fkN();
+          ikTargetM = [...frames[numDOF]];
+          syncIkMatrixToUI();
+          if (!ikAnimId) ikLoop();
+        } else {
+          if (ikAnimId) {
+            cancelAnimationFrame(ikAnimId);
+            ikAnimId = null;
+          }
+        }
+        draw();
+      });
 
-document.getElementById('ikNormR').addEventListener('click', () => {
-  for (let r=0; r<3; r++)
-    for (let c=0; c<4; c++) {
-      const el=document.getElementById('im'+r+c);
-      if (el) ikTargetM[r*4+c]=parseFloat(el.value)||0;
-    }
-  normalizeIkRotation();
-});
+      // ── Legend toggle ─────────────────────────────────────────────────────────────
+      document.getElementById("vLegend").addEventListener("click", () => {
+        const leg = document.getElementById("canvasLegend");
+        const btn = document.getElementById("vLegend");
+        const hidden = leg.style.display === "none";
+        leg.style.display = hidden ? "" : "none";
+        btn.classList.toggle("leg-on", hidden);
+      });
 
-document.getElementById('ikFullPose').addEventListener('change', function() { ikFullPose=this.checked; });
+      // ── IK Matrix UI ─────────────────────────────────────────────────────────────
 
-for (let r=0; r<3; r++)
-  for (let c=0; c<4; c++) {
-    const el=document.getElementById('im'+r+c);
-    const idx=r*4+c;
-    const commit=()=>{ ikTargetM[idx]=parseFloat(el.value)||0; };
-    el.addEventListener('change', commit);
-    el.addEventListener('keydown', e=>{ if(e.key==='Enter') commit(); });
-  }
+      document.getElementById("ikGetEE").addEventListener("click", () => {
+        const { frames } = fkN();
+        ikTargetM = [...frames[numDOF]];
+        syncIkMatrixToUI();
+      });
 
-// ── DOF Control ──────────────────────────────────────────────────────────────
+      document.getElementById("ikNormR").addEventListener("click", () => {
+        for (let r = 0; r < 3; r++)
+          for (let c = 0; c < 4; c++) {
+            const el = document.getElementById("im" + r + c);
+            if (el) ikTargetM[r * 4 + c] = parseFloat(el.value) || 0;
+          }
+        normalizeIkRotation();
+      });
 
-document.getElementById('dofDec').addEventListener('click', () => setDOF(numDOF-1));
-document.getElementById('dofInc').addEventListener('click', () => setDOF(numDOF+1));
+      document.getElementById("ikFullPose").addEventListener("change", function () {
+        ikFullPose = this.checked;
+      });
 
-// ── Init ─────────────────────────────────────────────────────────────────────
+      for (let r = 0; r < 3; r++)
+        for (let c = 0; c < 4; c++) {
+          const el = document.getElementById("im" + r + c);
+          const idx = r * 4 + c;
+          const commit = () => {
+            ikTargetM[idx] = parseFloat(el.value) || 0;
+          };
+          el.addEventListener("change", commit);
+          el.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") commit();
+          });
+        }
 
-window.addEventListener('resize', () => { resize(); draw(); });
-resize();
-setActive('vIso');
-setDOF(3); // builds UI and calls draw()
-</script>
-</body>
+      // ── DOF Control ──────────────────────────────────────────────────────────────
+
+      document.getElementById("dofDec").addEventListener("click", () => setDOF(numDOF - 1));
+      document.getElementById("dofInc").addEventListener("click", () => setDOF(numDOF + 1));
+
+      // ── Init ─────────────────────────────────────────────────────────────────────
+
+      window.addEventListener("resize", () => {
+        resize();
+        draw();
+      });
+
+      document.getElementById("themeToggle").addEventListener("click", () => {
+        lightMode = !lightMode;
+        document.body.classList.toggle("light", lightMode);
+        document.getElementById("themeToggle").textContent = lightMode ? "☾ Dark" : "☀ Light";
+        draw();
+      });
+      resize();
+      setActive("vIso");
+      setDOF(3); // builds UI and calls draw()
+    </script>
+  </body>
 </html>
