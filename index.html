@@ -98,6 +98,7 @@
         display: flex;
         flex-direction: column;
         overflow-y: auto;
+        overflow-x: hidden;
       }
 
       .card {
@@ -420,12 +421,14 @@
         left: 50%;
         transform: translateX(-50%);
         display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
         gap: 5px;
         background: rgba(8, 8, 18, 0.9);
         border: 1px solid #252545;
         border-radius: 10px;
         padding: 6px 8px;
-        white-space: nowrap;
+        max-width: calc(100% - 20px);
       }
       .vbtn {
         padding: 5px 13px;
