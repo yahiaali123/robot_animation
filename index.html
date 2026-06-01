@@ -1069,36 +1069,52 @@
 
       @media (max-width: 720px) {
         body {
-          height: auto;
-          overflow-y: auto;
+          height: 100dvh;
+          overflow: hidden;
         }
         main {
           flex-direction: column;
-          height: auto;
-          overflow: visible;
+          flex: 1;
+          overflow: hidden;
         }
         .canvas-panel {
           flex: none;
           width: 100%;
-          height: 58vw;
-          min-height: 260px;
-          max-height: 52vh;
+          height: 48vw;
+          min-height: 200px;
+          max-height: 46vh;
         }
         .side {
           width: 100%;
+          flex: 1;
+          min-height: 0;
           border-left: none;
           border-top: 1px solid #2a2a4a;
-          overflow-y: visible;
-          flex-shrink: 0;
+          overflow-y: auto;
         }
         .hint {
           display: none;
         }
+        /* viewbar moves into the side panel on mobile */
         .viewbar {
+          position: static;
+          bottom: auto;
+          left: auto;
+          transform: none;
+          border-radius: 0;
+          border: none;
+          border-bottom: 1px solid #1e1e36;
+          background: #0d0d1c;
+          padding: 8px 12px;
+          justify-content: flex-start;
           flex-wrap: wrap;
-          gap: 4px;
-          padding: 5px 7px;
-          bottom: 8px;
+          gap: 5px;
+          white-space: normal;
+        }
+        body.light .viewbar {
+          background: #f4f4fc;
+          border-bottom-color: #e4e4f4;
+          border-color: #d0d0e8;
         }
         .vbtn {
           padding: 5px 10px;
@@ -1255,6 +1271,11 @@
         <div class="card">
           <div class="card-title">Link Lengths</div>
           <div id="linkConfigContainer"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Link Inclinations</div>
+          <div id="linkInclineContainer"></div>
         </div>
 
         <div class="card">
@@ -1500,6 +1521,7 @@
       const axes = {};
       const types = {};
       const offsets = {};
+      const linkAlphas = {};
       let A = [...LEN_DEF];
 
       for (let j = 1; j <= MAX_DOF; j++) {
@@ -1507,6 +1529,7 @@
         types[j] = "r";
         offsets[j] = 0;
       }
+      for (let i = 0; i < MAX_DOF; i++) linkAlphas[i] = 0;
 
       // ── Forward Kinematics (N-DOF) ──────────────────────────────────────────────
       // Returns frames[0..N] and pos[0..N]:
@@ -1527,12 +1550,21 @@
           F =
             i === 0
               ? mmul(mTz(offsets[j]), getJointMat(types[j], axes[j], jointVal(j)))
-              : mmul(mmul(mmul(F, linkFn(A[i - 1])), mTz(offsets[j])), getJointMat(types[j], axes[j], jointVal(j)));
+              : mmul(
+                  mmul(
+                    mmul(mmul(F, mRy(d2r(linkAlphas[i - 1]))), linkFn(A[i - 1])),
+                    mTz(offsets[j])
+                  ),
+                  getJointMat(types[j], axes[j], jointVal(j))
+                );
           frames.push(F);
           pos.push(apT(F, O));
         }
 
-        const FEE = mmul(F, (axes[numDOF] === "x" ? mTz : mTx)(A[numDOF - 1]));
+        const FEE = mmul(
+          mmul(F, mRy(d2r(linkAlphas[numDOF - 1]))),
+          (axes[numDOF] === "x" ? mTz : mTx)(A[numDOF - 1])
+        );
         frames.push(FEE);
         pos.push(apT(FEE, O));
 
@@ -1547,10 +1579,16 @@
           relT.push(
             i === 0
               ? mmul(mTz(offsets[j]), getJointMat(types[j], axes[j], jointVal(j)))
-              : mmul(mmul(linkFn(A[i - 1]), mTz(offsets[j])), getJointMat(types[j], axes[j], jointVal(j))),
+              : mmul(
+                  mmul(
+                    mmul(mRy(d2r(linkAlphas[i - 1])), linkFn(A[i - 1])),
+                    mTz(offsets[j])
+                  ),
+                  getJointMat(types[j], axes[j], jointVal(j))
+                ),
           );
         }
-        relT.push((axes[numDOF] === "x" ? mTz : mTx)(A[numDOF - 1]));
+        relT.push(mmul(mRy(d2r(linkAlphas[numDOF - 1])), (axes[numDOF] === "x" ? mTz : mTx)(A[numDOF - 1])));
         return relT;
       }
 
@@ -1799,6 +1837,10 @@
         for (let i = 0; i < numDOF; i++) {
           const el = document.getElementById("no" + (i + 1));
           if (el) offsets[i + 1] = parseFloat(el.value) || 0;
+        }
+        for (let i = 0; i < numDOF; i++) {
+          const el = document.getElementById("nia" + (i + 1));
+          if (el) linkAlphas[i] = parseFloat(el.value) || 0;
         }
 
         const { frames, pos } = fkN();
@@ -2163,6 +2205,27 @@
         for (let j = 1; j <= numDOF; j++) sync("sl" + j, "nl" + j);
       }
 
+      function buildLinkInclineConfig() {
+        let html = "";
+        for (let i = 0; i < numDOF; i++) {
+          const j = i + 1;
+          const val = (linkAlphas[i] || 0).toFixed(1);
+          html += `<div class="jg">
+      <div class="jh"><span class="jlabel">α${SUBS[i]} — ${LINK_LABEL[i]}</span></div>
+      <div class="jctrl">
+        <input type="range"  id="sia${j}" min="-90" max="90" value="${val}" step="1">
+        <input type="number" id="nia${j}" min="-90" max="90" value="${val}" step="1">
+        <span class="deg">°</span>
+      </div>
+    </div>`;
+        }
+        document.getElementById("linkInclineContainer").innerHTML = html;
+      }
+
+      function attachLinkInclineListeners() {
+        for (let j = 1; j <= numDOF; j++) sync("sia" + j, "nia" + j);
+      }
+
       function buildOffsetConfig() {
         let html = "";
         for (let i = 0; i < numDOF; i++) {
@@ -2251,7 +2314,8 @@
         // Snapshot current joint values before rebuilding
         const savedAngles = {},
           savedLens = {},
-          savedOffsets = {};
+          savedOffsets = {},
+          savedAlphas = {};
         for (let j = 1; j <= numDOF; j++) {
           const el = document.getElementById("n" + j);
           if (el) savedAngles[j] = el.value;
@@ -2261,6 +2325,13 @@
           if (el) {
             A[i] = parseFloat(el.value) || LEN_DEF[i];
             savedLens[i] = A[i];
+          }
+        }
+        for (let i = 0; i < numDOF; i++) {
+          const el = document.getElementById("nia" + (i + 1));
+          if (el) {
+            linkAlphas[i] = parseFloat(el.value) || 0;
+            savedAlphas[i] = linkAlphas[i];
           }
         }
         for (let j = 1; j <= numDOF; j++) {
@@ -2282,10 +2353,12 @@
         buildFrameVisCard();
         buildJointConfig();
         buildLinkConfig();
+        buildLinkInclineConfig();
         buildOffsetConfig();
         buildVelocityConfig();
         attachJointListeners();
         attachLinkListeners();
+        attachLinkInclineListeners();
         attachOffsetListeners();
 
         // Restore previously set values
@@ -2313,6 +2386,15 @@
               nEl = document.getElementById("no" + j);
             if (s && nEl) {
               s.value = nEl.value = savedOffsets[j].toFixed(2);
+            }
+          }
+        }
+        for (let i = 0; i < numDOF; i++) {
+          if (savedAlphas[i] !== undefined) {
+            const s = document.getElementById("sia" + (i + 1)),
+              nEl = document.getElementById("nia" + (i + 1));
+            if (s && nEl) {
+              s.value = nEl.value = savedAlphas[i].toFixed(1);
             }
           }
         }
@@ -2565,6 +2647,8 @@
               e.touches[1].clientX - e.touches[0].clientX,
               e.touches[1].clientY - e.touches[0].clientY,
             );
+            lx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+            ly = (e.touches[0].clientY + e.touches[1].clientY) / 2;
           }
         },
         { passive: true },
@@ -2584,8 +2668,14 @@
               e.touches[1].clientX - e.touches[0].clientX,
               e.touches[1].clientY - e.touches[0].clientY,
             );
+            const mx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+            const my = (e.touches[0].clientY + e.touches[1].clientY) / 2;
             if (pinchDist0 > 0) scale = tgtScale = Math.max(50, Math.min(600, scale * (d / pinchDist0)));
+            panX += mx - lx;
+            panY += my - ly;
             pinchDist0 = d;
+            lx = mx;
+            ly = my;
             draw();
             return;
           }
@@ -2701,7 +2791,20 @@
 
       // ── Init ─────────────────────────────────────────────────────────────────────
 
+      function repositionViewbar() {
+        const mobile = window.innerWidth <= 720;
+        const vbar = document.querySelector(".viewbar");
+        const side = document.querySelector(".side");
+        const canvasPanel = document.querySelector(".canvas-panel");
+        if (mobile && vbar.parentElement !== side) {
+          side.prepend(vbar);
+        } else if (!mobile && vbar.parentElement !== canvasPanel) {
+          canvasPanel.appendChild(vbar);
+        }
+      }
+
       window.addEventListener("resize", () => {
+        repositionViewbar();
         resize();
         draw();
       });
@@ -2712,6 +2815,7 @@
         document.getElementById("themeToggle").textContent = lightMode ? "☾ Dark" : "☀ Light";
         draw();
       });
+      repositionViewbar();
       resize();
       setActive("vIso");
       setDOF(3); // builds UI and calls draw()
