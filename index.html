@@ -583,6 +583,16 @@
         color: #cc99ff;
       }
 
+      /* ── Screw Axes ─────────────────────────────────────────────────────────── */
+      .sa-frame-lbl {
+        font-size: 0.62rem;
+        font-weight: 700;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+        color: #4a4a7a;
+        margin-bottom: 5px;
+      }
+
       /* ── Jacobian ───────────────────────────────────────────────────────────── */
       .jac-wrap {
         overflow-x: auto;
@@ -1006,6 +1016,9 @@
       body.light .vel-out-lbl {
         color: #8080b0;
       }
+      body.light .sa-frame-lbl {
+        color: #7070a0;
+      }
       body.light .jac-wrap {
         background: #f4f4ff;
         border-color: #d0d0ec;
@@ -1394,6 +1407,16 @@
           </div>
         </div>
 
+        <div class="card">
+          <div class="card-title">
+            Screw Axes &nbsp;<span
+              style="font-weight: 400; color: #3a3a60; font-size: 0.65rem; text-transform: none; letter-spacing: 0"
+              >S = [ω ; v]</span
+            >
+          </div>
+          <div id="screwAxesContainer"><em style="color: #3a3a60; font-size: 0.7rem">—</em></div>
+        </div>
+
         <div class="card" id="ikMatCard" style="display: none">
           <div class="card-title">IK Target Transform</div>
           <div class="mwrap" id="ikMtx">
@@ -1470,7 +1493,7 @@
       const getAxisCol = (ax, F) => (ax === "x" ? colX(F) : ax === "y" ? colY(F) : colZ(F));
       const ringCol = (a) =>
         a === "x" ? "rgba(255,100,100,0.65)" : a === "y" ? "rgba(100,210,100,0.65)" : "rgba(160,160,255,0.65)";
-      const getJointMat = (tp, ax, v) => mmul(getAlignMat(ax), tp === "p" ? mTz(v) : mRz(v));
+      const getJointMat = (tp, ax, v) => mmul(getAlignMat(ax), tp === "p" ? mTz(v) : mRz(-v));
 
       const apT = (M, p) => [
         M[0] * p[0] + M[1] * p[1] + M[2] * p[2] + M[3],
@@ -1506,6 +1529,52 @@
         const x = vnorm(xr);
         const y = cross(x, z);
         return [x[0], y[0], -z[0], 0, x[1], y[1], -z[1], 0, x[2], y[2], -z[2], 0, 0, 0, 0, 1];
+      }
+
+      // Inverse of a rigid-body 4×4 transform: [R^T, -R^T·p; 0, 1]
+      function matInvRT(T) {
+        const r = [T[0], T[4], T[8], T[1], T[5], T[9], T[2], T[6], T[10]];
+        const p = [T[3], T[7], T[11]];
+        const t = [
+          -(r[0] * p[0] + r[1] * p[1] + r[2] * p[2]),
+          -(r[3] * p[0] + r[4] * p[1] + r[5] * p[2]),
+          -(r[6] * p[0] + r[7] * p[1] + r[8] * p[2]),
+        ];
+        return [r[0], r[1], r[2], t[0], r[3], r[4], r[5], t[1], r[6], r[7], r[8], t[2], 0, 0, 0, 1];
+      }
+
+      // Apply adjoint of T to twist [ow; vv]: Ad(T)·[ω;v] = [R·ω ; p×R·ω + R·v]
+      function adjAct(T, ow, vv) {
+        const R = [T[0], T[1], T[2], T[4], T[5], T[6], T[8], T[9], T[10]];
+        const p = [T[3], T[7], T[11]];
+        const Rw = [
+          R[0] * ow[0] + R[1] * ow[1] + R[2] * ow[2],
+          R[3] * ow[0] + R[4] * ow[1] + R[5] * ow[2],
+          R[6] * ow[0] + R[7] * ow[1] + R[8] * ow[2],
+        ];
+        const Rv = [
+          R[0] * vv[0] + R[1] * vv[1] + R[2] * vv[2],
+          R[3] * vv[0] + R[4] * vv[1] + R[5] * vv[2],
+          R[6] * vv[0] + R[7] * vv[1] + R[8] * vv[2],
+        ];
+        const c = cross(p, Rw);
+        return [Rw, [c[0] + Rv[0], c[1] + Rv[1], c[2] + Rv[2]]];
+      }
+
+      // Screw axis S_i = [ω_i ; v_i] for each joint, in base frame and EE frame.
+      // Revolute:  ω = joint axis (unit), v = −ω × q  (q = joint origin in world)
+      // Prismatic: ω = 0,                v = joint axis (unit translation direction)
+      function computeScrewAxes(frames, pos) {
+        const T_E0 = matInvRT(frames[numDOF]); // inv(T_{0→EE})
+        return Array.from({ length: numDOF }, (_, i) => {
+          const j = i + 1;
+          const z = colZ(frames[i]); // joint axis in world frame
+          const q = pos[i]; // point on axis (joint origin)
+          const ow_s = types[j] === "r" ? [-z[0], -z[1], -z[2]] : [0, 0, 0];
+          const vv_s = types[j] === "r" ? cross(z, q) : z; // ω=−z, v=−ω×q=z×q
+          const [ow_b, vv_b] = adjAct(T_E0, ow_s, vv_s);
+          return { ow_s, vv_s, ow_b, vv_b };
+        });
       }
 
       // ── Defaults & State ─────────────────────────────────────────────────────────
@@ -1608,7 +1677,7 @@
           if (types[j] === "r") {
             const dp = [pEE[0] - pos[i][0], pEE[1] - pos[i][1], pEE[2] - pos[i][2]];
             const jv = cross(z, dp);
-            return [jv[0], jv[1], jv[2], z[0], z[1], z[2]];
+            return [-jv[0], -jv[1], -jv[2], -z[0], -z[1], -z[2]];
           }
           return [z[0], z[1], z[2], 0, 0, 0];
         });
@@ -1993,6 +2062,41 @@
 
       // ── UI Update ────────────────────────────────────────────────────────────────
 
+      function renderScrewAxes(sa) {
+        const el = document.getElementById("screwAxesContainer");
+        if (!el) return;
+        const N = numDOF;
+        // Row labels and which component each row reads (sign flips Y for display)
+        const rowLabels = ["ωx", "ωy", "ωz", "vx", "vy", "vz"];
+        const rowSign   = [1, -1, 1, 1, -1, 1]; // negate Y indices
+
+        function tableHTML(getSA) {
+          let h =
+            '<div class="jac-wrap"><table class="jac-tbl"><thead><tr>' +
+            '<th class="jac-ch"></th>';
+          for (let i = 0; i < N; i++) h += `<th class="jac-ch">S${SUBS[i]}</th>`;
+          h += "</tr></thead><tbody>";
+          for (let r = 0; r < 6; r++) {
+            if (r === 3) h += `<tr class="jac-sep"><td colspan="${N + 1}"></td></tr>`;
+            const cls = r < 3 ? "jac-w" : "jac-v";
+            h += `<tr><td class="jac-rl ${cls}">${rowLabels[r]}</td>`;
+            for (let i = 0; i < N; i++) {
+              const { ow, vv } = getSA(i);
+              const val = r < 3 ? ow[r] : vv[r - 3];
+              h += `<td class="${cls}">${fmt(rowSign[r] * val, 3)}</td>`;
+            }
+            h += "</tr>";
+          }
+          return h + "</tbody></table></div>";
+        }
+
+        el.innerHTML =
+          `<div class="sa-frame-lbl">In Base Frame {0}</div>` +
+          tableHTML((i) => ({ ow: sa[i].ow_s, vv: sa[i].vv_s })) +
+          `<div class="sa-frame-lbl" style="margin-top:8px">In EE Frame {${N}}</div>` +
+          tableHTML((i) => ({ ow: sa[i].ow_b, vv: sa[i].vv_b }));
+      }
+
       function fmt(v, d = 3) {
         return (v >= 0 ? " " : "") + v.toFixed(d);
       }
@@ -2092,6 +2196,8 @@
           jHtml += "</tbody></table>";
           document.getElementById("jacContainer").innerHTML = `<div class="jac-wrap">${jHtml}</div>`;
         }
+
+        renderScrewAxes(computeScrewAxes(frames, pos));
       }
 
       // ── Frame Visibility ─────────────────────────────────────────────────────────
@@ -2513,8 +2619,8 @@
           const j = i + 1;
           const z = colZ(frames[i]);
           const pj = pos[i];
-          jvs.push(types[j] === "r" ? cross(z, [pEE[0] - pj[0], pEE[1] - pj[1], pEE[2] - pj[2]]) : [z[0], z[1], z[2]]);
-          jws.push(types[j] === "r" ? z : [0, 0, 0]);
+          jvs.push(types[j] === "r" ? cross([pEE[0] - pj[0], pEE[1] - pj[1], pEE[2] - pj[2]], z) : [z[0], z[1], z[2]]);
+          jws.push(types[j] === "r" ? [-z[0], -z[1], -z[2]] : [0, 0, 0]);
         }
 
         const wp = 1.0,
